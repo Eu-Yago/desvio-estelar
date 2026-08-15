@@ -71,6 +71,16 @@
     transition: opacity 0.3s ease;
   }
   #overlay.hidden{ opacity:0; pointer-events:none; }
+  #pauseOverlay{
+    position:absolute; inset:0;
+    flex-direction:column; align-items:center; justify-content:center;
+    text-align:center;
+    background: radial-gradient(ellipse at 50% 30%, rgba(45,27,78,0.55) 0%, rgba(5,5,16,0.92) 70%);
+    z-index: 10;
+    padding: 30px;
+    display: flex;
+  }
+  #pauseOverlay.hidden{ display:none; }
   .title{
     font-size: 34px;
     letter-spacing: 6px;
@@ -130,6 +140,41 @@
     text-transform: uppercase;
     z-index: 5;
   }
+  #pauseBtn{
+    position:absolute;
+    top: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: 1px solid rgba(244,240,255,0.35);
+    background: rgba(10,10,22,0.4);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    z-index: 6;
+    cursor: pointer;
+  }
+  #pauseBtn.hidden{ display:none; }
+  #pauseBtn svg{ width:14px; height:14px; }
+  #resumeBtn{
+    background: transparent;
+    border: 1px solid var(--comet);
+    color: var(--comet);
+    padding: 14px 40px;
+    font-family: inherit;
+    font-size: 14px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    border-radius: 2px;
+    cursor: pointer;
+    margin-top: 10px;
+  }
+  #resumeBtn:active{
+    background: var(--comet);
+    color: var(--void-deep);
+  }
 </style>
 </head>
 <body>
@@ -154,6 +199,19 @@
     <button id="startBtn">Começar</button>
   </div>
 
+  <div id="pauseOverlay" class="hidden">
+    <div class="title" style="font-size:28px;">PAUSADO</div>
+    <div class="msg">Sua nave está flutuando parada.<br>Quando quiser, volte pro jogo.</div>
+    <button id="resumeBtn">Continuar</button>
+  </div>
+
+  <button id="pauseBtn" class="hidden" aria-label="Pausar">
+    <svg viewBox="0 0 24 24" fill="none">
+      <rect x="6" y="5" width="4" height="14" fill="#f4f0ff"/>
+      <rect x="14" y="5" width="4" height="14" fill="#f4f0ff"/>
+    </svg>
+  </button>
+
   <div class="hint">arraste ou use ← →</div>
 </div>
 
@@ -167,6 +225,9 @@
   const scoreNowEl = document.getElementById('scoreNow');
   const scoreBestEl = document.getElementById('scoreBest');
   const msgText = document.getElementById('msgText');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const pauseOverlay = document.getElementById('pauseOverlay');
+  const resumeBtn = document.getElementById('resumeBtn');
 
   let W, H, DPR;
   function resize(){
@@ -190,7 +251,7 @@
   function localStorage_safe_get(){ return 0; } // artifacts sandbox: no persistent storage
   scoreBestEl.textContent = best;
 
-  let ship, asteroids, particles, stars, score, speedMul, running, dragX, keys, spawnTimer, elapsed;
+  let ship, asteroids, particles, stars, score, speedMul, running, paused, dragX, keys, spawnTimer, elapsed;
 
   function initStars(){
     stars = [];
@@ -221,6 +282,7 @@
     elapsed = 0;
     spawnTimer = 0;
     running = true;
+    paused = false;
     dragX = null;
   }
 
@@ -329,6 +391,7 @@
 
   function gameOver(){
     running = false;
+    pauseBtn.classList.add('hidden');
     explode(ship.x, ship.y);
     const finalScore = Math.floor(score);
     if(finalScore > best){
@@ -424,7 +487,7 @@
     let dt = (t - lastTime)/1000;
     dt = Math.min(dt, 0.05);
     lastTime = t;
-    if(running) update(dt);
+    if(running && !paused) update(dt);
     draw();
     requestAnimationFrame(loop);
   }
@@ -436,12 +499,12 @@
   }
 
   wrap.addEventListener('pointerdown', (e)=>{
-    if(!running) return;
+    if(!running || paused) return;
     dragX = e.clientX;
     setTargetFromClientX(e.clientX);
   });
   wrap.addEventListener('pointermove', (e)=>{
-    if(!running || dragX===null) return;
+    if(!running || paused || dragX===null) return;
     setTargetFromClientX(e.clientX);
   });
   window.addEventListener('pointerup', ()=>{ dragX = null; });
@@ -454,7 +517,7 @@
   window.addEventListener('keyup', (e)=>{ keys[e.key] = false; });
 
   function keyboardLoop(){
-    if(running){
+    if(running && !paused){
       if(keys['ArrowLeft'] || keys['a'] || keys['A']) ship.targetX -= 9;
       if(keys['ArrowRight'] || keys['d'] || keys['D']) ship.targetX += 9;
       ship.targetX = Math.max(20, Math.min(W-20, ship.targetX));
@@ -462,11 +525,28 @@
     requestAnimationFrame(keyboardLoop);
   }
 
+  function togglePause(){
+    if(!running) return;
+    paused = !paused;
+    pauseOverlay.classList.toggle('hidden', !paused);
+    dragX = null;
+  }
+
+  pauseBtn.addEventListener('click', togglePause);
+  resumeBtn.addEventListener('click', togglePause);
+  window.addEventListener('keydown', (e)=>{
+    if(e.key === 'p' || e.key === 'P' || e.key === 'Escape'){
+      togglePause();
+    }
+  });
+
   function startGame(){
     resize();
     initStars();
     resetGame();
     overlay.classList.add('hidden');
+    pauseOverlay.classList.add('hidden');
+    pauseBtn.classList.remove('hidden');
   }
 
   startBtn.addEventListener('click', startGame);
