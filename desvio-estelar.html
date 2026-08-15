@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Desvio Estelar</title>
+<style>
+  :root{
+    --void: #0a0a16;
+    --void-deep: #050510;
+    --nebula: #2d1b4e;
+    --star: #f4f0ff;
+    --comet: #7ce8d8;
+    --danger: #ff5d73;
+    --gold: #f5c542;
+  }
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body{
+    margin:0; padding:0; height:100%; overflow:hidden;
+    background: var(--void-deep);
+    font-family: 'Courier New', monospace;
+    touch-action: none;
+    user-select: none;
+  }
+  body{
+    display:flex; align-items:center; justify-content:center;
+  }
+  #wrap{
+    position:relative;
+    width:100%; height:100%;
+    max-width: 480px;
+    max-height: 900px;
+    background: radial-gradient(ellipse at 50% 20%, var(--nebula) 0%, var(--void) 45%, var(--void-deep) 100%);
+    overflow:hidden;
+    border-radius: 0;
+  }
+  canvas{
+    display:block;
+    width:100%; height:100%;
+  }
+  .hud{
+    position:absolute; top:0; left:0; right:0;
+    display:flex; justify-content:space-between; align-items:flex-start;
+    padding: 18px 20px;
+    pointer-events:none;
+    z-index: 5;
+  }
+  .hud-block{
+    color: var(--star);
+    font-size: 12px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    opacity: 0.85;
+  }
+  .hud-num{
+    font-size: 28px;
+    letter-spacing: 1px;
+    color: var(--comet);
+    text-shadow: 0 0 12px rgba(124,232,216,0.5);
+    font-weight: bold;
+  }
+  .hud-best .hud-num{ color: var(--gold); text-shadow: 0 0 12px rgba(245,197,66,0.5); font-size: 18px; }
+
+  #overlay{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center;
+    background: radial-gradient(ellipse at 50% 30%, rgba(45,27,78,0.55) 0%, rgba(5,5,16,0.92) 70%);
+    z-index: 10;
+    padding: 30px;
+    transition: opacity 0.3s ease;
+  }
+  #overlay.hidden{ opacity:0; pointer-events:none; }
+  .title{
+    font-size: 34px;
+    letter-spacing: 6px;
+    color: var(--star);
+    margin: 0 0 6px 0;
+    text-shadow: 0 0 20px rgba(124,232,216,0.4);
+  }
+  .subtitle{
+    font-size: 12px;
+    letter-spacing: 3px;
+    color: var(--comet);
+    text-transform: uppercase;
+    margin-bottom: 30px;
+    opacity: 0.8;
+  }
+  .msg{
+    color: var(--star);
+    font-size: 13px;
+    line-height: 1.9;
+    letter-spacing: 1px;
+    margin-bottom: 30px;
+    opacity: 0.75;
+    max-width: 280px;
+  }
+  .score-final{
+    font-size: 15px;
+    color: var(--star);
+    letter-spacing: 2px;
+    margin-bottom: 4px;
+  }
+  .score-final b{ color: var(--gold); font-size: 22px; }
+  #startBtn{
+    background: transparent;
+    border: 1px solid var(--comet);
+    color: var(--comet);
+    padding: 14px 40px;
+    font-family: inherit;
+    font-size: 14px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-top: 10px;
+  }
+  #startBtn:active{
+    background: var(--comet);
+    color: var(--void-deep);
+  }
+  .hint{
+    position:absolute; bottom: 18px; left:0; right:0;
+    text-align:center;
+    color: var(--star);
+    opacity: 0.35;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    z-index: 5;
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game"></canvas>
+
+  <div class="hud">
+    <div class="hud-block">
+      <div>Pontos</div>
+      <div class="hud-num" id="scoreNow">0</div>
+    </div>
+    <div class="hud-block hud-best" style="text-align:right;">
+      <div>Recorde</div>
+      <div class="hud-num" id="scoreBest">0</div>
+    </div>
+  </div>
+
+  <div id="overlay">
+    <div class="title">DESVIO ESTELAR</div>
+    <div class="subtitle">um jogo pra passar o tempo</div>
+    <div class="msg" id="msgText">Guie sua nave pelo campo de asteroides.<br>Toque e arraste, ou use as setas.<br>Quanto mais tempo vivo, mais rápido fica.</div>
+    <button id="startBtn">Começar</button>
+  </div>
+
+  <div class="hint">arraste ou use ← →</div>
+</div>
+
+<script>
+(function(){
+  const wrap = document.getElementById('wrap');
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const overlay = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+  const scoreNowEl = document.getElementById('scoreNow');
+  const scoreBestEl = document.getElementById('scoreBest');
+  const msgText = document.getElementById('msgText');
+
+  let W, H, DPR;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    const rect = wrap.getBoundingClientRect();
+    W = rect.width; H = rect.height;
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  let best = 0;
+  try {
+    const stored = localStorage_safe_get();
+    if(stored) best = stored;
+  } catch(e){}
+  function localStorage_safe_get(){ return 0; } // artifacts sandbox: no persistent storage
+  scoreBestEl.textContent = best;
+
+  let ship, asteroids, particles, stars, score, speedMul, running, dragX, keys, spawnTimer, elapsed;
+
+  function initStars(){
+    stars = [];
+    for(let i=0;i<80;i++){
+      stars.push({
+        x: Math.random()*W,
+        y: Math.random()*H,
+        r: Math.random()*1.6 + 0.3,
+        speed: Math.random()*0.4 + 0.15,
+        tw: Math.random()*Math.PI*2
+      });
+    }
+  }
+
+  function resetGame(){
+    ship = {
+      x: W/2,
+      y: H - 110,
+      w: 30,
+      h: 38,
+      targetX: W/2,
+      trail: []
+    };
+    asteroids = [];
+    particles = [];
+    score = 0;
+    speedMul = 1;
+    elapsed = 0;
+    spawnTimer = 0;
+    running = true;
+    dragX = null;
+  }
+
+  function spawnAsteroid(){
+    const size = 16 + Math.random()*26;
+    asteroids.push({
+      x: Math.random()*(W-size*2) + size,
+      y: -size*2,
+      r: size,
+      vy: (1.6 + Math.random()*1.4) * speedMul,
+      rot: Math.random()*Math.PI*2,
+      vrot: (Math.random()-0.5)*0.06,
+      shape: makeRockShape(size)
+    });
+  }
+
+  function makeRockShape(r){
+    const pts = [];
+    const n = 8 + Math.floor(Math.random()*3);
+    for(let i=0;i<n;i++){
+      const ang = (i/n)*Math.PI*2;
+      const rad = r * (0.75 + Math.random()*0.4);
+      pts.push({ang, rad});
+    }
+    return pts;
+  }
+
+  function addThrust(){
+    for(let i=0;i<2;i++){
+      particles.push({
+        x: ship.x + (Math.random()-0.5)*14,
+        y: ship.y + 16,
+        vx: (Math.random()-0.5)*0.6,
+        vy: 2 + Math.random()*1.5,
+        life: 1,
+        r: Math.random()*2.5+1
+      });
+    }
+  }
+
+  function explode(x,y){
+    for(let i=0;i<26;i++){
+      const ang = Math.random()*Math.PI*2;
+      const spd = Math.random()*4+1;
+      particles.push({
+        x, y,
+        vx: Math.cos(ang)*spd,
+        vy: Math.sin(ang)*spd,
+        life: 1,
+        r: Math.random()*3+1.5,
+        color: Math.random()>0.5 ? '#ff5d73' : '#f5c542'
+      });
+    }
+  }
+
+  function update(dt){
+    elapsed += dt;
+    speedMul = 1 + elapsed/22;
+    score += dt * 12 * speedMul;
+
+    // stars
+    stars.forEach(s=>{
+      s.y += s.speed * speedMul;
+      if(s.y > H){ s.y = 0; s.x = Math.random()*W; }
+    });
+
+    // ship movement toward target
+    const dx = ship.targetX - ship.x;
+    ship.x += dx * 0.18;
+    ship.x = Math.max(ship.w, Math.min(W-ship.w, ship.x));
+
+    if(Math.random() < 0.6) addThrust();
+
+    // particles
+    particles.forEach(p=>{
+      p.x += p.vx; p.y += p.vy; p.life -= 0.03;
+    });
+    particles = particles.filter(p=>p.life>0);
+
+    // spawn asteroids
+    spawnTimer -= dt;
+    const spawnRate = Math.max(0.35, 0.95 - elapsed*0.012);
+    if(spawnTimer <= 0){
+      spawnAsteroid();
+      spawnTimer = spawnRate;
+    }
+
+    // asteroids
+    asteroids.forEach(a=>{
+      a.y += a.vy;
+      a.rot += a.vrot;
+    });
+    asteroids = asteroids.filter(a=> a.y - a.r < H + 40);
+
+    // collision
+    for(const a of asteroids){
+      const ddx = a.x - ship.x;
+      const ddy = a.y - (ship.y+6);
+      const dist = Math.sqrt(ddx*ddx+ddy*ddy);
+      if(dist < a.r*0.82 + 12){
+        gameOver();
+        break;
+      }
+    }
+  }
+
+  function gameOver(){
+    running = false;
+    explode(ship.x, ship.y);
+    const finalScore = Math.floor(score);
+    if(finalScore > best){
+      best = finalScore;
+      scoreBestEl.textContent = best;
+    }
+    setTimeout(()=>{
+      msgText.innerHTML = 'Você marcou <b style="color:#f5c542">' + finalScore + '</b> pontos.<br>Os asteroides pegaram você.<br>Tenta de novo?';
+      startBtn.textContent = 'Jogar de novo';
+      overlay.classList.remove('hidden');
+    }, 500);
+  }
+
+  function drawShip(){
+    ctx.save();
+    ctx.translate(ship.x, ship.y);
+    // glow
+    ctx.shadowColor = 'rgba(124,232,216,0.7)';
+    ctx.shadowBlur = 14;
+    ctx.fillStyle = '#f4f0ff';
+    ctx.beginPath();
+    ctx.moveTo(0, -20);
+    ctx.lineTo(13, 18);
+    ctx.lineTo(0, 11);
+    ctx.lineTo(-13, 18);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#7ce8d8';
+    ctx.beginPath();
+    ctx.moveTo(0,-8);
+    ctx.lineTo(6,6);
+    ctx.lineTo(0,2);
+    ctx.lineTo(-6,6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawAsteroid(a){
+    ctx.save();
+    ctx.translate(a.x, a.y);
+    ctx.rotate(a.rot);
+    ctx.beginPath();
+    a.shape.forEach((p,i)=>{
+      const x = Math.cos(p.ang)*p.rad;
+      const y = Math.sin(p.ang)*p.rad;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.closePath();
+    ctx.fillStyle = '#3a3352';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(124,232,216,0.35)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+
+    // stars
+    stars.forEach(s=>{
+      s.tw += 0.05;
+      const a = 0.4 + Math.sin(s.tw)*0.3;
+      ctx.globalAlpha = Math.max(0.1,a);
+      ctx.fillStyle = '#f4f0ff';
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
+    // particles
+    particles.forEach(p=>{
+      ctx.globalAlpha = Math.max(0,p.life);
+      ctx.fillStyle = p.color || '#7ce8d8';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
+    asteroids.forEach(drawAsteroid);
+    if(running) drawShip();
+
+    scoreNowEl.textContent = Math.floor(score);
+  }
+
+  let lastTime = null;
+  function loop(t){
+    if(lastTime===null) lastTime = t;
+    let dt = (t - lastTime)/1000;
+    dt = Math.min(dt, 0.05);
+    lastTime = t;
+    if(running) update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // Controls
+  function setTargetFromClientX(clientX){
+    const rect = wrap.getBoundingClientRect();
+    ship.targetX = clientX - rect.left;
+  }
+
+  wrap.addEventListener('pointerdown', (e)=>{
+    if(!running) return;
+    dragX = e.clientX;
+    setTargetFromClientX(e.clientX);
+  });
+  wrap.addEventListener('pointermove', (e)=>{
+    if(!running || dragX===null) return;
+    setTargetFromClientX(e.clientX);
+  });
+  window.addEventListener('pointerup', ()=>{ dragX = null; });
+
+  keys = {};
+  window.addEventListener('keydown', (e)=>{
+    if(['ArrowLeft','ArrowRight','a','d','A','D'].includes(e.key)) e.preventDefault();
+    keys[e.key] = true;
+  });
+  window.addEventListener('keyup', (e)=>{ keys[e.key] = false; });
+
+  function keyboardLoop(){
+    if(running){
+      if(keys['ArrowLeft'] || keys['a'] || keys['A']) ship.targetX -= 9;
+      if(keys['ArrowRight'] || keys['d'] || keys['D']) ship.targetX += 9;
+      ship.targetX = Math.max(20, Math.min(W-20, ship.targetX));
+    }
+    requestAnimationFrame(keyboardLoop);
+  }
+
+  function startGame(){
+    resize();
+    initStars();
+    resetGame();
+    overlay.classList.add('hidden');
+  }
+
+  startBtn.addEventListener('click', startGame);
+
+  initStars();
+  ship = { x: W/2, y: H-110, w:30, h:38, targetX: W/2, trail: [] };
+  asteroids = [];
+  particles = [];
+  score = 0;
+  running = false;
+  requestAnimationFrame(loop);
+  requestAnimationFrame(keyboardLoop);
+})();
+</script>
+</body>
+</html>
