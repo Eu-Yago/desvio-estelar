@@ -303,6 +303,7 @@
   const pauseOverlay = document.getElementById('pauseOverlay');
   const resumeBtn = document.getElementById('resumeBtn');
   const nameField = document.getElementById('nameField');
+  nameField.addEventListener('keydown', (e)=>{ e.stopPropagation(); });
   const rankingBtn = document.getElementById('rankingBtn');
   const rankingOverlay = document.getElementById('rankingOverlay');
   const closeRankingBtn = document.getElementById('closeRankingBtn');
