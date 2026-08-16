@@ -682,6 +682,8 @@
 
   keys = {};
   window.addEventListener('keydown', (e)=>{
+    const typing = document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
+    if(typing) return;
     if(['ArrowLeft','ArrowRight','a','d','A','D'].includes(e.key)) e.preventDefault();
     keys[e.key] = true;
   });
@@ -706,6 +708,8 @@
   pauseBtn.addEventListener('click', togglePause);
   resumeBtn.addEventListener('click', togglePause);
   window.addEventListener('keydown', (e)=>{
+    const typing = document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
+    if(typing) return;
     if(e.key === 'p' || e.key === 'P' || e.key === 'Escape'){
       togglePause();
     }
