@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Desvio Estelar</title>
+<!-- Firebase (para ranking online) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
   :root{
     --void: #0a0a16;
@@ -81,6 +84,66 @@
     display: flex;
   }
   #pauseOverlay.hidden{ display:none; }
+
+  #rankingOverlay{
+    position:absolute; inset:0;
+    flex-direction:column; align-items:center; justify-content:center;
+    text-align:center;
+    background: radial-gradient(ellipse at 50% 30%, rgba(45,27,78,0.55) 0%, rgba(5,5,16,0.95) 70%);
+    z-index: 11;
+    padding: 30px;
+    display: flex;
+  }
+  #rankingOverlay.hidden{ display:none; }
+  .rank-list{
+    width: 100%;
+    max-width: 300px;
+    max-height: 320px;
+    overflow-y: auto;
+    margin: 10px 0 24px 0;
+  }
+  .rank-row{
+    display:flex; justify-content:space-between; align-items:center;
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(124,232,216,0.15);
+    color: var(--star);
+    font-size: 13px;
+    letter-spacing: 1px;
+  }
+  .rank-row .pos{ color: var(--comet); width: 28px; text-align:left; flex-shrink:0; }
+  .rank-row .rname{ flex:1; text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-right:10px; }
+  .rank-row .rscore{ color: var(--gold); font-weight:bold; flex-shrink:0; }
+  .rank-empty{ color: var(--star); opacity:0.5; font-size: 12px; padding: 20px; letter-spacing:1px; }
+  .ghost-btn{
+    background: transparent;
+    border: 1px solid rgba(244,240,255,0.35);
+    color: var(--star);
+    padding: 12px 30px;
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    border-radius: 2px;
+    cursor: pointer;
+    margin-top: 6px;
+  }
+  .ghost-btn:active{ background: rgba(244,240,255,0.12); }
+  #nameField{
+    background: rgba(244,240,255,0.06);
+    border: 1px solid var(--comet);
+    color: var(--star);
+    padding: 12px 16px;
+    font-family: inherit;
+    font-size: 14px;
+    letter-spacing: 1px;
+    border-radius: 2px;
+    text-align:center;
+    width: 220px;
+    margin-bottom: 16px;
+    outline: none;
+  }
+  #nameField::placeholder{ color: rgba(244,240,255,0.35); }
+  .row-btns{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
   .title{
     font-size: 34px;
     letter-spacing: 6px;
@@ -196,7 +259,18 @@
     <div class="title">DESVIO ESTELAR</div>
     <div class="subtitle">um jogo pra passar o tempo</div>
     <div class="msg" id="msgText">Guie sua nave pelo campo de asteroides.<br>Toque e arraste, ou use as setas.<br>Quanto mais tempo vivo, mais rápido fica.</div>
-    <button id="startBtn">Começar</button>
+    <input type="text" id="nameField" placeholder="Seu nome" maxlength="18">
+    <div class="row-btns">
+      <button id="startBtn">Começar</button>
+      <button id="rankingBtn" class="ghost-btn">Ranking</button>
+    </div>
+  </div>
+
+  <div id="rankingOverlay" class="hidden">
+    <div class="title" style="font-size:26px;">RANKING</div>
+    <div class="subtitle">melhores pontuações</div>
+    <div class="rank-list" id="rankList"><div class="rank-empty">Carregando...</div></div>
+    <button id="closeRankingBtn" class="ghost-btn">Fechar</button>
   </div>
 
   <div id="pauseOverlay" class="hidden">
@@ -228,6 +302,11 @@
   const pauseBtn = document.getElementById('pauseBtn');
   const pauseOverlay = document.getElementById('pauseOverlay');
   const resumeBtn = document.getElementById('resumeBtn');
+  const nameField = document.getElementById('nameField');
+  const rankingBtn = document.getElementById('rankingBtn');
+  const rankingOverlay = document.getElementById('rankingOverlay');
+  const closeRankingBtn = document.getElementById('closeRankingBtn');
+  const rankList = document.getElementById('rankList');
 
   let W, H, DPR;
   function resize(){
@@ -242,6 +321,93 @@
   }
   window.addEventListener('resize', resize);
   resize();
+
+  // ======= FIREBASE (ranking online) =======
+  // 1. Crie um projeto grátis em https://console.firebase.google.com
+  // 2. Ative o Firestore Database (modo produção)
+  // 3. Copie as chaves do seu projeto e cole aqui embaixo:
+  const firebaseConfig = {
+    apiKey: "AIzaSyAJ3Fa1vSx1EiEQ-wZyo3KComVPloa65VA",
+    authDomain: "desvio-estelar.firebaseapp.com",
+    projectId: "desvio-estelar",
+    storageBucket: "desvio-estelar.firebasestorage.app",
+    messagingSenderId: "274652733468",
+    appId: "1:274652733468:web:aa67236bd7865959c4ffd9"
+  };
+
+  let db = null;
+  let firebaseReady = false;
+  try {
+    if(firebaseConfig.apiKey !== "SUA_API_KEY"){
+      firebase.initializeApp(firebaseConfig);
+      db = firebase.firestore();
+      firebaseReady = true;
+    }
+  } catch(e){ console.warn('Firebase não configurado:', e); }
+
+  function slugify(name){
+    return name.trim().toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'') || 'jogador';
+  }
+
+  async function saveScoreOnline(name, scoreVal){
+    if(!firebaseReady || !name) return;
+    const id = slugify(name);
+    const ref = db.collection('scores').doc(id);
+    try{
+      const doc = await ref.get();
+      const current = doc.exists ? doc.data().score : 0;
+      if(scoreVal > current){
+        await ref.set({ name: name.trim().slice(0,18), score: scoreVal, updatedAt: Date.now() });
+      }
+    } catch(e){ console.warn('Erro ao salvar pontuação:', e); }
+  }
+
+  async function loadRanking(){
+    rankList.innerHTML = '<div class="rank-empty">Carregando...</div>';
+    if(!firebaseReady){
+      rankList.innerHTML = '<div class="rank-empty">Ranking online não configurado ainda.</div>';
+      return;
+    }
+    try{
+      const snap = await db.collection('scores').orderBy('score','desc').limit(20).get();
+      if(snap.empty){
+        rankList.innerHTML = '<div class="rank-empty">Ninguém jogou ainda. Seja o primeiro!</div>';
+        return;
+      }
+      let html = '';
+      let pos = 1;
+      snap.forEach(doc=>{
+        const d = doc.data();
+        html += '<div class="rank-row"><span class="pos">'+pos+'</span><span class="rname">'+escapeHtml(d.name)+'</span><span class="rscore">'+d.score+'</span></div>';
+        pos++;
+      });
+      rankList.innerHTML = html;
+    } catch(e){
+      rankList.innerHTML = '<div class="rank-empty">Não foi possível carregar o ranking.</div>';
+      console.warn(e);
+    }
+  }
+
+  function escapeHtml(s){
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  // lembra o último nome digitado, só de conveniência local
+  try{
+    const savedName = window.localStorage ? window.localStorage.getItem('desvioEstelar_name') : null;
+    if(savedName) nameField.value = savedName;
+  } catch(e){}
+
+  rankingBtn.addEventListener('click', ()=>{
+    rankingOverlay.classList.remove('hidden');
+    loadRanking();
+  });
+  closeRankingBtn.addEventListener('click', ()=>{
+    rankingOverlay.classList.add('hidden');
+  });
+  // ======= FIM FIREBASE =======
 
   let best = 0;
   try {
@@ -397,6 +563,11 @@
     if(finalScore > best){
       best = finalScore;
       scoreBestEl.textContent = best;
+    }
+    const playerName = nameField.value.trim();
+    if(playerName){
+      try{ if(window.localStorage) window.localStorage.setItem('desvioEstelar_name', playerName); } catch(e){}
+      saveScoreOnline(playerName, finalScore);
     }
     setTimeout(()=>{
       msgText.innerHTML = 'Você marcou <b style="color:#f5c542">' + finalScore + '</b> pontos.<br>Os asteroides pegaram você.<br>Tenta de novo?';
