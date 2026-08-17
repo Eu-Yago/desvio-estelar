@@ -444,6 +444,7 @@
       w: 30,
       h: 38,
       targetX: W/2,
+      targetY: H - 110,
       trail: []
     };
     asteroids = [];
@@ -455,6 +456,7 @@
     running = true;
     paused = false;
     dragX = null;
+    lastMilestone = 0;
   }
 
   function spawnAsteroid(){
@@ -509,10 +511,54 @@
     }
   }
 
+  // ======= SOM (marcos de pontuação) =======
+  let audioCtx = null;
+  let lastMilestone = 0;
+
+  function getAudioCtx(){
+    if(!audioCtx){
+      try{ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch(e){ return null; }
+    }
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  function playMilestoneChime(level){
+    const ctx = getAudioCtx();
+    if(!ctx) return;
+    const baseFreq = 520 + Math.min(level, 10) * 60; // fica mais agudo a cada marco
+    const notes = [baseFreq, baseFreq * 1.25, baseFreq * 1.5];
+    notes.forEach((freq, i)=>{
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const startAt = ctx.currentTime + i * 0.09;
+      gain.gain.setValueAtTime(0, startAt);
+      gain.gain.linearRampToValueAtTime(0.18, startAt + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, startAt + 0.28);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(startAt);
+      osc.stop(startAt + 0.3);
+    });
+  }
+
+  function checkScoreMilestone(){
+    const milestone = Math.floor(score / 1000);
+    if(milestone > lastMilestone){
+      lastMilestone = milestone;
+      playMilestoneChime(milestone);
+    }
+  }
+  // ======= FIM SOM =======
+
   function update(dt){
     elapsed += dt;
     speedMul = 1 + elapsed/22;
     score += dt * 12 * speedMul;
+    checkScoreMilestone();
 
     // stars
     stars.forEach(s=>{
@@ -520,10 +566,14 @@
       if(s.y > H){ s.y = 0; s.x = Math.random()*W; }
     });
 
-    // ship movement toward target
+    // ship movement toward target (horizontal + vertical)
     const dx = ship.targetX - ship.x;
     ship.x += dx * 0.18;
     ship.x = Math.max(ship.w, Math.min(W-ship.w, ship.x));
+
+    const dy = ship.targetY - ship.y;
+    ship.y += dy * 0.18;
+    ship.y = Math.max(ship.h, Math.min(H-ship.h*0.6, ship.y));
 
     if(Math.random() < 0.6) addThrust();
 
@@ -669,19 +719,20 @@
   }
 
   // Controls
-  function setTargetFromClientX(clientX){
+  function setTargetFromClient(clientX, clientY){
     const rect = wrap.getBoundingClientRect();
     ship.targetX = clientX - rect.left;
+    ship.targetY = clientY - rect.top;
   }
 
   wrap.addEventListener('pointerdown', (e)=>{
     if(!running || paused) return;
     dragX = e.clientX;
-    setTargetFromClientX(e.clientX);
+    setTargetFromClient(e.clientX, e.clientY);
   });
   wrap.addEventListener('pointermove', (e)=>{
     if(!running || paused || dragX===null) return;
-    setTargetFromClientX(e.clientX);
+    setTargetFromClient(e.clientX, e.clientY);
   });
   window.addEventListener('pointerup', ()=>{ dragX = null; });
 
@@ -689,7 +740,7 @@
   window.addEventListener('keydown', (e)=>{
     const typing = document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
     if(typing) return;
-    if(['ArrowLeft','ArrowRight','a','d','A','D'].includes(e.key)) e.preventDefault();
+    if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','a','d','w','s','A','D','W','S'].includes(e.key)) e.preventDefault();
     keys[e.key] = true;
   });
   window.addEventListener('keyup', (e)=>{ keys[e.key] = false; });
@@ -698,7 +749,10 @@
     if(running && !paused){
       if(keys['ArrowLeft'] || keys['a'] || keys['A']) ship.targetX -= 9;
       if(keys['ArrowRight'] || keys['d'] || keys['D']) ship.targetX += 9;
+      if(keys['ArrowUp'] || keys['w'] || keys['W']) ship.targetY -= 9;
+      if(keys['ArrowDown'] || keys['s'] || keys['S']) ship.targetY += 9;
       ship.targetX = Math.max(20, Math.min(W-20, ship.targetX));
+      ship.targetY = Math.max(20, Math.min(H-20, ship.targetY));
     }
     requestAnimationFrame(keyboardLoop);
   }
