@@ -99,6 +99,18 @@
     display: flex;
   }
   #rankingOverlay.hidden{ display:none; }
+
+  #skinsOverlay{
+    position:absolute; inset:0;
+    flex-direction:column; align-items:center; justify-content:center;
+    text-align:center;
+    background: radial-gradient(ellipse at 50% 30%, rgba(45,27,78,0.55) 0%, rgba(5,5,16,0.95) 70%);
+    z-index: 11;
+    padding: 30px;
+    display: flex;
+  }
+  #skinsOverlay.hidden{ display:none; }
+
   .rank-list{
     width: 100%;
     max-width: 300px;
