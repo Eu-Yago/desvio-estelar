@@ -148,6 +148,32 @@
   }
   #nameField::placeholder{ color: rgba(244,240,255,0.35); }
   .row-btns{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+
+  .skins-grid{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    width: 100%;
+    max-width: 320px;
+    margin: 10px 0 24px 0;
+    max-height: 360px;
+    overflow-y: auto;
+  }
+  .skin-card{
+    border: 1px solid rgba(244,240,255,0.2);
+    border-radius: 4px;
+    padding: 14px 8px 10px 8px;
+    display:flex; flex-direction:column; align-items:center;
+    cursor: pointer;
+    background: rgba(244,240,255,0.03);
+    position: relative;
+  }
+  .skin-card.selected{ border-color: var(--comet); background: rgba(124,232,216,0.08); }
+  .skin-card.locked{ opacity: 0.45; cursor: default; }
+  .skin-card svg{ width: 40px; height: 48px; margin-bottom: 8px; }
+  .skin-name{ color: var(--star); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; }
+  .skin-lock{ font-size: 10px; color: var(--gold); margin-top: 4px; letter-spacing: 0.5px; }
+  .skin-check{ position:absolute; top:6px; right:8px; color: var(--comet); font-size: 14px; }
   .title{
     font-size: 34px;
     letter-spacing: 6px;
@@ -267,6 +293,7 @@
     <div class="row-btns">
       <button id="startBtn">Começar</button>
       <button id="rankingBtn" class="ghost-btn">Ranking</button>
+      <button id="skinsBtn" class="ghost-btn">Naves</button>
     </div>
   </div>
 
@@ -275,6 +302,13 @@
     <div class="subtitle">melhores pontuações</div>
     <div class="rank-list" id="rankList"><div class="rank-empty">Carregando...</div></div>
     <button id="closeRankingBtn" class="ghost-btn">Fechar</button>
+  </div>
+
+  <div id="skinsOverlay" class="hidden">
+    <div class="title" style="font-size:26px;">NAVES</div>
+    <div class="subtitle">escolha sua nave</div>
+    <div class="skins-grid" id="skinsGrid"></div>
+    <button id="closeSkinsBtn" class="ghost-btn">Fechar</button>
   </div>
 
   <div id="pauseOverlay" class="hidden">
@@ -304,6 +338,7 @@
   const scoreBestEl = document.getElementById('scoreBest');
   const msgText = document.getElementById('msgText');
   const pauseBtn = document.getElementById('pauseBtn');
+  pauseBtn.addEventListener('pointerdown', (e)=>{ e.stopPropagation(); });
   const pauseOverlay = document.getElementById('pauseOverlay');
   const resumeBtn = document.getElementById('resumeBtn');
   const nameField = document.getElementById('nameField');
@@ -312,6 +347,10 @@
   const rankingOverlay = document.getElementById('rankingOverlay');
   const closeRankingBtn = document.getElementById('closeRankingBtn');
   const rankList = document.getElementById('rankList');
+  const skinsBtn = document.getElementById('skinsBtn');
+  const skinsOverlay = document.getElementById('skinsOverlay');
+  const closeSkinsBtn = document.getElementById('closeSkinsBtn');
+  const skinsGrid = document.getElementById('skinsGrid');
 
   let W, H, DPR;
   function resize(){
@@ -414,13 +453,96 @@
   });
   // ======= FIM FIREBASE =======
 
+  // ======= RECORDE (persistido no aparelho) =======
   let best = 0;
   try {
-    const stored = localStorage_safe_get();
-    if(stored) best = stored;
+    const stored = parseInt(window.localStorage.getItem('desvioEstelar_best'), 10);
+    if(!isNaN(stored)) best = stored;
   } catch(e){}
-  function localStorage_safe_get(){ return 0; } // artifacts sandbox: no persistent storage
   scoreBestEl.textContent = best;
+
+  function saveBest(newBest){
+    best = newBest;
+    scoreBestEl.textContent = best;
+    try{ window.localStorage.setItem('desvioEstelar_best', String(best)); }catch(e){}
+  }
+  // ======= FIM RECORDE =======
+
+  // ======= SKINS =======
+  const SKINS = [
+    { id:'estelar',   name:'Estelar',   hull:'#f4f0ff', inner:'#7ce8d8', glow:'rgba(124,232,216,0.7)', unlock:0 },
+    { id:'nebulosa',  name:'Nebulosa',  hull:'#d9bfff', inner:'#ff6fd8', glow:'rgba(255,111,216,0.7)', unlock:2000 },
+    { id:'solar',     name:'Solar',     hull:'#ffe3ad', inner:'#ffab3d', glow:'rgba(255,171,61,0.7)',  unlock:5000 },
+    { id:'carmesim',  name:'Carmesim',  hull:'#ffc2cc', inner:'#ff5d73', glow:'rgba(255,93,115,0.7)',  unlock:10000 },
+    { id:'esmeralda', name:'Esmeralda', hull:'#c2ffd9', inner:'#3dffa0', glow:'rgba(61,255,160,0.7)',  unlock:20000 },
+  ];
+
+  let unlockedSkins = ['estelar'];
+  let selectedSkinId = 'estelar';
+  try{
+    const storedUnlocked = JSON.parse(window.localStorage.getItem('desvioEstelar_unlocked') || '["estelar"]');
+    if(Array.isArray(storedUnlocked)) unlockedSkins = storedUnlocked;
+    const storedSelected = window.localStorage.getItem('desvioEstelar_skin');
+    if(storedSelected) selectedSkinId = storedSelected;
+  }catch(e){}
+
+  function getSelectedSkin(){
+    return SKINS.find(s=>s.id===selectedSkinId) || SKINS[0];
+  }
+
+  function saveSkinState(){
+    try{
+      window.localStorage.setItem('desvioEstelar_unlocked', JSON.stringify(unlockedSkins));
+      window.localStorage.setItem('desvioEstelar_skin', selectedSkinId);
+    }catch(e){}
+  }
+
+  function checkSkinUnlocks(currentBest){
+    let newlyUnlocked = [];
+    SKINS.forEach(skin=>{
+      if(currentBest >= skin.unlock && !unlockedSkins.includes(skin.id)){
+        unlockedSkins.push(skin.id);
+        newlyUnlocked.push(skin);
+      }
+    });
+    if(newlyUnlocked.length){
+      saveSkinState();
+    }
+    return newlyUnlocked;
+  }
+
+  function shipIconSvg(skin){
+    return '<svg viewBox="0 0 40 44"><polygon points="20,2 33,38 20,29 7,38" fill="'+skin.hull+'"/><polygon points="20,14 26,32 20,28 14,32" fill="'+skin.inner+'"/></svg>';
+  }
+
+  function renderSkinsGrid(){
+    skinsGrid.innerHTML = '';
+    SKINS.forEach(skin=>{
+      const unlocked = unlockedSkins.includes(skin.id);
+      const card = document.createElement('div');
+      card.className = 'skin-card' + (unlocked ? '' : ' locked') + (skin.id===selectedSkinId ? ' selected' : '');
+      card.innerHTML = shipIconSvg(skin) +
+        '<div class="skin-name">'+skin.name+'</div>' +
+        (unlocked ? (skin.id===selectedSkinId ? '<div class="skin-check">✓</div>' : '') : '<div class="skin-lock">'+skin.unlock+' pts</div>');
+      if(unlocked){
+        card.addEventListener('click', ()=>{
+          selectedSkinId = skin.id;
+          saveSkinState();
+          renderSkinsGrid();
+        });
+      }
+      skinsGrid.appendChild(card);
+    });
+  }
+
+  skinsBtn.addEventListener('click', ()=>{
+    renderSkinsGrid();
+    skinsOverlay.classList.remove('hidden');
+  });
+  closeSkinsBtn.addEventListener('click', ()=>{
+    skinsOverlay.classList.add('hidden');
+  });
+  // ======= FIM SKINS =======
 
   let ship, asteroids, particles, stars, score, speedMul, running, paused, dragX, keys, spawnTimer, elapsed;
 
@@ -615,9 +737,10 @@
     pauseBtn.classList.add('hidden');
     explode(ship.x, ship.y);
     const finalScore = Math.floor(score);
+    let newlyUnlocked = [];
     if(finalScore > best){
-      best = finalScore;
-      scoreBestEl.textContent = best;
+      saveBest(finalScore);
+      newlyUnlocked = checkSkinUnlocks(finalScore);
     }
     const playerName = nameField.value.trim();
     if(playerName){
@@ -625,7 +748,12 @@
       saveScoreOnline(playerName, finalScore);
     }
     setTimeout(()=>{
-      msgText.innerHTML = 'Você marcou <b style="color:#f5c542">' + finalScore + '</b> pontos.<br>Os asteroides pegaram você.<br>Tenta de novo?';
+      let msg = 'Você marcou <b style="color:#f5c542">' + finalScore + '</b> pontos.<br>Os asteroides pegaram você.<br>Tenta de novo?';
+      if(newlyUnlocked.length){
+        const names = newlyUnlocked.map(s=>s.name).join(', ');
+        msg += '<br><br><b style="color:#7ce8d8">Nova nave desbloqueada: ' + names + '!</b>';
+      }
+      msgText.innerHTML = msg;
       startBtn.textContent = 'Jogar de novo';
       overlay.classList.remove('hidden');
     }, 500);
@@ -634,10 +762,11 @@
   function drawShip(){
     ctx.save();
     ctx.translate(ship.x, ship.y);
+    const skin = getSelectedSkin();
     // glow
-    ctx.shadowColor = 'rgba(124,232,216,0.7)';
+    ctx.shadowColor = skin.glow;
     ctx.shadowBlur = 14;
-    ctx.fillStyle = '#f4f0ff';
+    ctx.fillStyle = skin.hull;
     ctx.beginPath();
     ctx.moveTo(0, -20);
     ctx.lineTo(13, 18);
@@ -646,7 +775,7 @@
     ctx.closePath();
     ctx.fill();
     ctx.shadowBlur = 0;
-    ctx.fillStyle = '#7ce8d8';
+    ctx.fillStyle = skin.inner;
     ctx.beginPath();
     ctx.moveTo(0,-8);
     ctx.lineTo(6,6);
