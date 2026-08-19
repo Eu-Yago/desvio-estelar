@@ -263,6 +263,29 @@
   }
   #pauseBtn.hidden{ display:none; }
   #pauseBtn svg{ width:14px; height:14px; }
+
+  #laserBtn{
+    position:absolute;
+    bottom: 26px;
+    right: 22px;
+    width: 58px;
+    height: 58px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,93,115,0.55);
+    background: rgba(10,10,22,0.5);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    z-index: 6;
+    cursor: pointer;
+    color: var(--danger);
+  }
+  #laserBtn.hidden{ display:none; }
+  #laserBtn.depleted{ opacity: 0.3; border-color: rgba(244,240,255,0.2); color: rgba(244,240,255,0.3); }
+  #laserBtn svg{ width:20px; height:20px; }
+  #laserBtn .laser-count{ font-size: 10px; letter-spacing: 1px; margin-top: 2px; }
+  #laserBtn:active:not(.depleted){ background: rgba(255,93,115,0.2); }
   #resumeBtn{
     background: transparent;
     border: 1px solid var(--comet);
@@ -336,6 +359,14 @@
     </svg>
   </button>
 
+  <button id="laserBtn" class="hidden" aria-label="Disparar laser">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M12 2 L12 22" stroke="#ff5d73" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="12" cy="12" r="3" fill="#ff5d73"/>
+    </svg>
+    <span class="laser-count" id="laserCount">x3</span>
+  </button>
+
   <div class="hint">arraste ou use ← →</div>
 </div>
 
@@ -351,6 +382,9 @@
   const msgText = document.getElementById('msgText');
   const pauseBtn = document.getElementById('pauseBtn');
   pauseBtn.addEventListener('pointerdown', (e)=>{ e.stopPropagation(); });
+  const laserBtn = document.getElementById('laserBtn');
+  const laserCount = document.getElementById('laserCount');
+  laserBtn.addEventListener('pointerdown', (e)=>{ e.stopPropagation(); });
   const pauseOverlay = document.getElementById('pauseOverlay');
   const resumeBtn = document.getElementById('resumeBtn');
   const nameField = document.getElementById('nameField');
@@ -557,6 +591,7 @@
   // ======= FIM SKINS =======
 
   let ship, asteroids, particles, stars, score, speedMul, running, paused, dragX, keys, spawnTimer, elapsed;
+  let laserBeams = [], laserCharges = 3;
 
   function initStars(){
     stars = [];
@@ -583,6 +618,9 @@
     };
     asteroids = [];
     particles = [];
+    laserBeams = [];
+    laserCharges = 3;
+    updateLaserUI();
     score = 0;
     speedMul = 1;
     elapsed = 0;
@@ -658,6 +696,57 @@
     return audioCtx;
   }
 
+  function playLaserSound(){
+    const ctx = getAudioCtx();
+    if(!ctx) return;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sawtooth';
+    const now = ctx.currentTime;
+    osc.frequency.setValueAtTime(1100, now);
+    osc.frequency.exponentialRampToValueAtTime(220, now + 0.18);
+    gain.gain.setValueAtTime(0.15, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.22);
+  }
+
+  function updateLaserUI(){
+    laserCount.textContent = 'x' + laserCharges;
+    laserBtn.classList.toggle('depleted', laserCharges <= 0);
+  }
+
+  function fireLaser(){
+    if(!running || paused || laserCharges <= 0) return;
+    laserCharges--;
+    updateLaserUI();
+    playLaserSound();
+
+    const corridorHalfWidth = 26;
+    laserBeams.push({
+      x: ship.x,
+      y0: ship.y - 14,
+      y1: 0,
+      life: 1
+    });
+
+    const survivors = [];
+    asteroids.forEach(a=>{
+      if(Math.abs(a.x - ship.x) <= corridorHalfWidth + a.r && a.y < ship.y){
+        explode(a.x, a.y);
+        score += Math.floor(a.r); // pequeno bônus por asteroide destruído
+      } else {
+        survivors.push(a);
+      }
+    });
+    asteroids = survivors;
+  }
+
+  laserBtn.addEventListener('click', fireLaser);
+  // ======= FIM LASER =======
+
   function playMilestoneChime(level){
     const ctx = getAudioCtx();
     if(!ctx) return;
@@ -717,6 +806,10 @@
     });
     particles = particles.filter(p=>p.life>0);
 
+    // laser beams
+    laserBeams.forEach(b=>{ b.life -= 0.12; });
+    laserBeams = laserBeams.filter(b=>b.life>0);
+
     // spawn asteroids
     spawnTimer -= dt;
     const spawnRate = Math.max(0.35, 0.95 - elapsed*0.012);
@@ -747,6 +840,7 @@
   function gameOver(){
     running = false;
     pauseBtn.classList.add('hidden');
+    laserBtn.classList.add('hidden');
     explode(ship.x, ship.y);
     const finalScore = Math.floor(score);
     let newlyUnlocked = [];
@@ -842,6 +936,21 @@
     });
     ctx.globalAlpha = 1;
 
+    // laser beams
+    laserBeams.forEach(b=>{
+      ctx.globalAlpha = Math.max(0, b.life);
+      ctx.strokeStyle = '#ff5d73';
+      ctx.lineWidth = 6;
+      ctx.shadowColor = 'rgba(255,93,115,0.8)';
+      ctx.shadowBlur = 16;
+      ctx.beginPath();
+      ctx.moveTo(b.x, b.y0);
+      ctx.lineTo(b.x, b.y1);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    });
+    ctx.globalAlpha = 1;
+
     asteroids.forEach(drawAsteroid);
     if(running) drawShip();
 
@@ -913,6 +1022,10 @@
     if(e.key === 'p' || e.key === 'P' || e.key === 'Escape'){
       togglePause();
     }
+    if(e.key === ' '){
+      e.preventDefault();
+      fireLaser();
+    }
   });
 
   function startGame(){
@@ -922,6 +1035,7 @@
     overlay.classList.add('hidden');
     pauseOverlay.classList.add('hidden');
     pauseBtn.classList.remove('hidden');
+    laserBtn.classList.remove('hidden');
   }
 
   startBtn.addEventListener('click', startGame);
