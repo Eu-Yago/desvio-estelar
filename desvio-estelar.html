@@ -93,7 +93,7 @@
     position:absolute; inset:0;
     flex-direction:column; align-items:center; justify-content:center;
     text-align:center;
-    background: radial-gradient(ellipse at 50% 30%, rgba(45,27,78,0.55) 0%, rgba(5,5,16,0.95) 70%);
+    background: var(--void-deep);
     z-index: 11;
     padding: 30px;
     display: flex;
@@ -104,7 +104,7 @@
     position:absolute; inset:0;
     flex-direction:column; align-items:center; justify-content:center;
     text-align:center;
-    background: radial-gradient(ellipse at 50% 30%, rgba(45,27,78,0.55) 0%, rgba(5,5,16,0.95) 70%);
+    background: var(--void-deep);
     z-index: 11;
     padding: 30px;
     display: flex;
@@ -115,7 +115,7 @@
     position:absolute; inset:0;
     flex-direction:column; align-items:center; justify-content:center;
     text-align:center;
-    background: radial-gradient(ellipse at 50% 30%, rgba(45,27,78,0.55) 0%, rgba(5,5,16,0.95) 70%);
+    background: var(--void-deep);
     z-index: 11;
     padding: 30px;
     display: flex;
@@ -605,9 +605,6 @@
   resize();
 
   // ======= FIREBASE (ranking online) =======
-  // 1. Crie um projeto grátis em https://console.firebase.google.com
-  // 2. Ative o Firestore Database (modo produção)
-  // 3. Copie as chaves do seu projeto e cole aqui embaixo:
   const firebaseConfig = {
     apiKey: "AIzaSyAJ3Fa1vSx1EiEQ-wZyo3KComVPloa65VA",
     authDomain: "desvio-estelar.firebaseapp.com",
@@ -676,7 +673,6 @@
     return d.innerHTML;
   }
 
-  // lembra o último nome digitado, só de conveniência local
   try{
     const savedName = window.localStorage ? window.localStorage.getItem('desvioEstelar_name') : null;
     if(savedName) nameField.value = savedName;
@@ -989,7 +985,7 @@
     asteroids.forEach(a=>{
       if(Math.abs(a.x - ship.x) <= corridorHalfWidth + a.r && a.y < ship.y){
         explode(a.x, a.y);
-        score += Math.floor(a.r); // pequeno bônus por asteroide destruído
+        score += Math.floor(a.r);
         gameStats.laserKills++;
       } else {
         survivors.push(a);
@@ -1002,13 +998,10 @@
     }
   }
 
-  // disparo já é feito no pointerdown (mais rápido e confiável em multitoque)
-  // ======= FIM LASER =======
-
   function playMilestoneChime(level){
     const ctx = getAudioCtx();
     if(!ctx) return;
-    const baseFreq = 520 + Math.min(level, 10) * 60; // fica mais agudo a cada marco
+    const baseFreq = 520 + Math.min(level, 10) * 60;
     const notes = [baseFreq, baseFreq * 1.25, baseFreq * 1.5];
     notes.forEach((freq, i)=>{
       const osc = ctx.createOscillator();
@@ -1049,13 +1042,11 @@
     checkScoreMilestone();
     checkLiveAchievements();
 
-    // stars
     stars.forEach(s=>{
       s.y += s.speed * speedMul;
       if(s.y > H){ s.y = 0; s.x = Math.random()*W; }
     });
 
-    // ship movement toward target (horizontal + vertical)
     const dx = ship.targetX - ship.x;
     ship.x += dx * 0.18;
     ship.x = Math.max(ship.w, Math.min(W-ship.w, ship.x));
@@ -1066,17 +1057,14 @@
 
     if(Math.random() < 0.6) addThrust();
 
-    // particles
     particles.forEach(p=>{
       p.x += p.vx; p.y += p.vy; p.life -= 0.03;
     });
     particles = particles.filter(p=>p.life>0);
 
-    // laser beams
     laserBeams.forEach(b=>{ b.life -= 0.12; });
     laserBeams = laserBeams.filter(b=>b.life>0);
 
-    // spawn asteroids
     spawnTimer -= dt;
     const spawnRate = Math.max(0.35, 0.95 - elapsed*0.012);
     if(spawnTimer <= 0){
@@ -1084,14 +1072,12 @@
       spawnTimer = spawnRate;
     }
 
-    // asteroids
     asteroids.forEach(a=>{
       a.y += a.vy;
       a.rot += a.vrot;
     });
     asteroids = asteroids.filter(a=> a.y - a.r < H + 40);
 
-    // collision
     for(const a of asteroids){
       const ddx = a.x - ship.x;
       const ddy = a.y - (ship.y+6);
@@ -1148,7 +1134,6 @@
     ctx.save();
     ctx.translate(ship.x, ship.y);
     const skin = resolveSkinColors(getSelectedSkin());
-    // glow
     ctx.shadowColor = skin.glow;
     ctx.shadowBlur = 14;
     ctx.fillStyle = skin.hull;
@@ -1193,7 +1178,6 @@
   function draw(){
     ctx.clearRect(0,0,W,H);
 
-    // stars
     stars.forEach(s=>{
       s.tw += 0.05;
       const a = 0.4 + Math.sin(s.tw)*0.3;
@@ -1205,7 +1189,6 @@
     });
     ctx.globalAlpha = 1;
 
-    // particles
     particles.forEach(p=>{
       ctx.globalAlpha = Math.max(0,p.life);
       ctx.fillStyle = p.color || '#7ce8d8';
@@ -1215,7 +1198,6 @@
     });
     ctx.globalAlpha = 1;
 
-    // laser beams
     laserBeams.forEach(b=>{
       ctx.globalAlpha = Math.max(0, b.life);
       ctx.strokeStyle = b.color || '#ff5d73';
@@ -1247,10 +1229,8 @@
     requestAnimationFrame(loop);
   }
 
-  // Controls
   let dragPointerId = null;
-
-  const TOUCH_OFFSET_Y = 70; // distância que a nave fica acima do dedo
+  const TOUCH_OFFSET_Y = 70;
 
   function setTargetFromClient(clientX, clientY){
     const rect = wrap.getBoundingClientRect();
@@ -1340,7 +1320,6 @@
   requestAnimationFrame(loop);
   requestAnimationFrame(keyboardLoop);
 
-  // Service Worker (permite jogar offline após a primeira visita)
   if('serviceWorker' in navigator){
     window.addEventListener('load', ()=>{
       navigator.serviceWorker.register('sw.js').catch(e=>console.warn('SW não registrado:', e));
@@ -1349,4 +1328,4 @@
 })();
 </script>
 </body>
-</html>
+  </html>
