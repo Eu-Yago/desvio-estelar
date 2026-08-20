@@ -144,6 +144,7 @@
     margin-top: 6px;
   }
   .ghost-btn:active{ background: rgba(244,240,255,0.12); }
+  #shareBtn.hidden{ display:none; }
   #nameField{
     background: rgba(244,240,255,0.06);
     border: 1px solid var(--comet);
@@ -329,6 +330,7 @@
       <button id="startBtn">Começar</button>
       <button id="rankingBtn" class="ghost-btn">Ranking</button>
       <button id="skinsBtn" class="ghost-btn">Naves</button>
+      <button id="shareBtn" class="ghost-btn hidden">Compartilhar</button>
     </div>
   </div>
 
@@ -397,6 +399,25 @@
   const skinsOverlay = document.getElementById('skinsOverlay');
   const closeSkinsBtn = document.getElementById('closeSkinsBtn');
   const skinsGrid = document.getElementById('skinsGrid');
+
+  // ======= COMPARTILHAR PONTUAÇÃO =======
+  const shareBtn = document.getElementById('shareBtn');
+  let lastFinalScore = 0;
+
+  async function shareScore(){
+    const text = 'Fiz ' + lastFinalScore + ' pontos no Desvio Estelar! 🚀 Consegue bater meu recorde?';
+    const url = window.location.href;
+    if(navigator.share){
+      try{ await navigator.share({ title: 'Desvio Estelar', text, url }); }
+      catch(e){ /* usuário cancelou, tudo bem */ }
+    } else {
+      const waUrl = 'https://wa.me/?text=' + encodeURIComponent(text + ' ' + url);
+      window.open(waUrl, '_blank');
+    }
+  }
+
+  shareBtn.addEventListener('click', shareScore);
+  // ======= FIM COMPARTILHAR =======
 
   let W, H, DPR;
   function resize(){
@@ -843,6 +864,7 @@
     laserBtn.classList.add('hidden');
     explode(ship.x, ship.y);
     const finalScore = Math.floor(score);
+    lastFinalScore = finalScore;
     let newlyUnlocked = [];
     if(finalScore > best){
       saveBest(finalScore);
@@ -861,6 +883,7 @@
       }
       msgText.innerHTML = msg;
       startBtn.textContent = 'Jogar de novo';
+      shareBtn.classList.remove('hidden');
       overlay.classList.remove('hidden');
     }, 500);
   }
@@ -1036,6 +1059,7 @@
     pauseOverlay.classList.add('hidden');
     pauseBtn.classList.remove('hidden');
     laserBtn.classList.remove('hidden');
+    shareBtn.classList.add('hidden');
   }
 
   startBtn.addEventListener('click', startGame);
@@ -1048,6 +1072,13 @@
   running = false;
   requestAnimationFrame(loop);
   requestAnimationFrame(keyboardLoop);
+
+  // Service Worker (permite jogar offline após a primeira visita)
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', ()=>{
+      navigator.serviceWorker.register('sw.js').catch(e=>console.warn('SW não registrado:', e));
+    });
+  }
 })();
 </script>
 </body>
