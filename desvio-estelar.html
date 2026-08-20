@@ -1050,6 +1050,7 @@
     pauseBtn.classList.add('hidden');
     laserBtn.classList.add('hidden');
     explode(ship.x, ship.y);
+    if(navigator.vibrate) navigator.vibrate([40, 30, 80]);
     const finalScore = Math.floor(score);
     lastFinalScore = finalScore;
 
