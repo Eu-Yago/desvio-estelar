@@ -470,6 +470,7 @@
   const resumeBtn = document.getElementById('resumeBtn');
   const nameField = document.getElementById('nameField');
   nameField.addEventListener('keydown', (e)=>{ e.stopPropagation(); });
+  nameField.addEventListener('input', checkNameSkinUnlock);
   const rankingBtn = document.getElementById('rankingBtn');
   const rankingOverlay = document.getElementById('rankingOverlay');
   const closeRankingBtn = document.getElementById('closeRankingBtn');
@@ -489,9 +490,10 @@
     { id:'atirador',          icon:'🎯', name:'Atirador',            desc:'Destrua 10 asteroides com o laser.' },
     { id:'por-pouco',         icon:'🛡️', name:'Por Pouco',           desc:'Passe raspando por um asteroide sem bater.' },
     { id:'sem-perder-laser',  icon:'🔥', name:'Sem Perder o Laser',  desc:'Termine uma partida sem usar o laser.' },
-    { id:'colecionador',      icon:'🚀', name:'Colecionador',        desc:'Desbloqueie todas as naves.' },
+    { id:'colecionador',      icon:'🚀', name:'Colecionador',        desc:'Desbloqueie todas as naves por pontuação.' },
     { id:'veterano',          icon:'🎮', name:'Veterano',            desc:'Jogue 20 partidas.' },
     { id:'divulgador',        icon:'📢', name:'Divulgador',          desc:'Compartilhe sua pontuação pela primeira vez.' },
+    { id:'pilotar-adm',       icon:'👑', name:'Pilote a nave do Adm', desc:'Existe um código secreto...', secret:true },
   ];
 
   let unlockedAchievements = [];
@@ -521,6 +523,7 @@
     saveAchievementState();
     toastQueue.push(ach);
     processToastQueue();
+    checkLegendarySkinUnlock();
   }
 
   function processToastQueue(){
@@ -704,12 +707,16 @@
   // ======= FIM RECORDE =======
 
   // ======= SKINS =======
+  const FOUNDER_CODE = 'adm nave';
+
   const SKINS = [
-    { id:'estelar',   name:'Estelar',   hull:'#f4f0ff', inner:'#7ce8d8', glow:'rgba(124,232,216,0.7)', unlock:0 },
-    { id:'nebulosa',  name:'Nebulosa',  hull:'#d9bfff', inner:'#ff6fd8', glow:'rgba(255,111,216,0.7)', unlock:2000 },
-    { id:'solar',     name:'Solar',     hull:'#ffe3ad', inner:'#ffab3d', glow:'rgba(255,171,61,0.7)',  unlock:5000 },
-    { id:'carmesim',  name:'Carmesim',  hull:'#ffc2cc', inner:'#ff5d73', glow:'rgba(255,93,115,0.7)',  unlock:10000 },
-    { id:'esmeralda', name:'Esmeralda', hull:'#c2ffd9', inner:'#3dffa0', glow:'rgba(61,255,160,0.7)',  unlock:20000 },
+    { id:'estelar',   name:'Estelar',   hull:'#f4f0ff', inner:'#7ce8d8', glow:'rgba(124,232,216,0.7)', thrust:'#7ce8d8', laser:'#ff5d73', unlockType:'score', unlock:0 },
+    { id:'nebulosa',  name:'Nebulosa',  hull:'#d9bfff', inner:'#ff6fd8', glow:'rgba(255,111,216,0.7)', thrust:'#ff6fd8', laser:'#ff5d73', unlockType:'score', unlock:2000 },
+    { id:'solar',     name:'Solar',     hull:'#ffe3ad', inner:'#ffab3d', glow:'rgba(255,171,61,0.7)',  thrust:'#ffab3d', laser:'#ff5d73', unlockType:'score', unlock:5000 },
+    { id:'carmesim',  name:'Carmesim',  hull:'#ffc2cc', inner:'#ff5d73', glow:'rgba(255,93,115,0.7)',  thrust:'#ff5d73', laser:'#ff5d73', unlockType:'score', unlock:10000 },
+    { id:'esmeralda', name:'Esmeralda', hull:'#c2ffd9', inner:'#3dffa0', glow:'rgba(61,255,160,0.7)',  thrust:'#3dffa0', laser:'#ff5d73', unlockType:'score', unlock:20000 },
+    { id:'fundador',  name:'Fundador',  hull:'#1c1c26', inner:'#ffd54a', glow:'rgba(255,213,74,0.9)',  thrust:'#ffd54a', laser:'#ffd54a', unlockType:'name' },
+    { id:'lendaria',  name:'Lendária',  hull:'#ffffff', inner:'#ff2fe0', glow:'rgba(255,255,255,0.85)', thrust:'#ff2fe0', laser:'#ff2fe0', unlockType:'achievements', dynamic:true },
   ];
 
   let unlockedSkins = ['estelar'];
@@ -725,6 +732,20 @@
     return SKINS.find(s=>s.id===selectedSkinId) || SKINS[0];
   }
 
+  function resolveSkinColors(skin){
+    if(skin.dynamic){
+      const hue = (Date.now()/12) % 360;
+      return {
+        hull: 'hsl(' + hue + ',95%,88%)',
+        inner: 'hsl(' + ((hue+140)%360) + ',95%,65%)',
+        glow: 'hsla(' + hue + ',95%,70%,0.85)',
+        thrust: 'hsl(' + ((hue+140)%360) + ',95%,65%)',
+        laser: 'hsl(' + ((hue+70)%360) + ',95%,60%)'
+      };
+    }
+    return skin;
+  }
+
   function saveSkinState(){
     try{
       window.localStorage.setItem('desvioEstelar_unlocked', JSON.stringify(unlockedSkins));
@@ -735,7 +756,7 @@
   function checkSkinUnlocks(currentBest){
     let newlyUnlocked = [];
     SKINS.forEach(skin=>{
-      if(currentBest >= skin.unlock && !unlockedSkins.includes(skin.id)){
+      if(skin.unlockType === 'score' && currentBest >= skin.unlock && !unlockedSkins.includes(skin.id)){
         unlockedSkins.push(skin.id);
         newlyUnlocked.push(skin);
       }
@@ -743,14 +764,50 @@
     if(newlyUnlocked.length){
       saveSkinState();
     }
-    if(unlockedSkins.length >= SKINS.length){
-      unlockAchievement('colecionador');
-    }
+    checkAllSkinsAchievement();
     return newlyUnlocked;
+  }
+
+  function checkAllSkinsAchievement(){
+    const collectibleSkins = SKINS.filter(s=>s.unlockType==='score');
+    const gotAll = collectibleSkins.every(s=>unlockedSkins.includes(s.id));
+    if(gotAll) unlockAchievement('colecionador');
+  }
+
+  function unlockSpecialSkin(id){
+    if(unlockedSkins.includes(id)) return false;
+    unlockedSkins.push(id);
+    saveSkinState();
+    return true;
+  }
+
+  function checkNameSkinUnlock(){
+    const name = nameField.value.trim().toLowerCase();
+    if(name === FOUNDER_CODE){
+      if(unlockSpecialSkin('fundador')){
+        renderSkinsGrid();
+      }
+      unlockAchievement('pilotar-adm');
+    }
+  }
+
+  function checkLegendarySkinUnlock(){
+    if(unlockedAchievements.length >= ACHIEVEMENTS.length){
+      if(unlockSpecialSkin('lendaria')){
+        renderSkinsGrid();
+      }
+    }
   }
 
   function shipIconSvg(skin){
     return '<svg viewBox="0 0 40 44"><polygon points="20,2 33,38 20,29 7,38" fill="'+skin.hull+'"/><polygon points="20,14 26,32 20,28 14,32" fill="'+skin.inner+'"/></svg>';
+  }
+
+  function skinLockLabel(skin){
+    if(skin.unlockType === 'score') return skin.unlock + ' pts';
+    if(skin.unlockType === 'name') return 'Segredo';
+    if(skin.unlockType === 'achievements') return 'Todas conquistas';
+    return '???';
   }
 
   function renderSkinsGrid(){
@@ -761,7 +818,7 @@
       card.className = 'skin-card' + (unlocked ? '' : ' locked') + (skin.id===selectedSkinId ? ' selected' : '');
       card.innerHTML = shipIconSvg(skin) +
         '<div class="skin-name">'+skin.name+'</div>' +
-        (unlocked ? (skin.id===selectedSkinId ? '<div class="skin-check">✓</div>' : '') : '<div class="skin-lock">'+skin.unlock+' pts</div>');
+        (unlocked ? (skin.id===selectedSkinId ? '<div class="skin-check">✓</div>' : '') : '<div class="skin-lock">'+skinLockLabel(skin)+'</div>');
       if(unlocked){
         card.addEventListener('click', ()=>{
           selectedSkinId = skin.id;
@@ -848,6 +905,7 @@
   }
 
   function addThrust(){
+    const color = resolveSkinColors(getSelectedSkin()).thrust;
     for(let i=0;i<2;i++){
       particles.push({
         x: ship.x + (Math.random()-0.5)*14,
@@ -855,7 +913,8 @@
         vx: (Math.random()-0.5)*0.6,
         vy: 2 + Math.random()*1.5,
         life: 1,
-        r: Math.random()*2.5+1
+        r: Math.random()*2.5+1,
+        color: color
       });
     }
   }
@@ -917,11 +976,13 @@
     playLaserSound();
 
     const corridorHalfWidth = 26;
+    const laserColor = resolveSkinColors(getSelectedSkin()).laser;
     laserBeams.push({
       x: ship.x,
       y0: ship.y - 14,
       y1: 0,
-      life: 1
+      life: 1,
+      color: laserColor
     });
 
     const survivors = [];
@@ -1086,7 +1147,7 @@
   function drawShip(){
     ctx.save();
     ctx.translate(ship.x, ship.y);
-    const skin = getSelectedSkin();
+    const skin = resolveSkinColors(getSelectedSkin());
     // glow
     ctx.shadowColor = skin.glow;
     ctx.shadowBlur = 14;
@@ -1157,9 +1218,9 @@
     // laser beams
     laserBeams.forEach(b=>{
       ctx.globalAlpha = Math.max(0, b.life);
-      ctx.strokeStyle = '#ff5d73';
+      ctx.strokeStyle = b.color || '#ff5d73';
       ctx.lineWidth = 6;
-      ctx.shadowColor = 'rgba(255,93,115,0.8)';
+      ctx.shadowColor = b.color || 'rgba(255,93,115,0.8)';
       ctx.shadowBlur = 16;
       ctx.beginPath();
       ctx.moveTo(b.x, b.y0);
@@ -1189,10 +1250,12 @@
   // Controls
   let dragPointerId = null;
 
+  const TOUCH_OFFSET_Y = 70; // distância que a nave fica acima do dedo
+
   function setTargetFromClient(clientX, clientY){
     const rect = wrap.getBoundingClientRect();
     ship.targetX = clientX - rect.left;
-    ship.targetY = clientY - rect.top;
+    ship.targetY = clientY - rect.top - TOUCH_OFFSET_Y;
   }
 
   wrap.addEventListener('pointerdown', (e)=>{
