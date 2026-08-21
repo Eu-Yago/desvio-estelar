@@ -480,26 +480,6 @@
   const closeSkinsBtn = document.getElementById('closeSkinsBtn');
   const skinsGrid = document.getElementById('skinsGrid');
 
-  // ======= CARREGAMENTO DAS IMAGENS =======
-  const images = {};
-  const imageSources = {
-    'asteroide-grande': 'asteroide-grande.png',
-    'asteroide-medio': 'asteroide-medio.png',
-    'asteroide-pequeno': 'asteroide-pequeno.png',
-    'terra': 'planeta-terra.png',
-    'marte': 'planeta-marte.png',
-    'jupiter': 'planeta-jupiter.png',
-    'saturno': 'planeta-saturno.png',
-    'netuno': 'planeta-netuno.png',
-    'lua': 'planeta-lua.png'
-  };
-
-  Object.keys(imageSources).forEach(key => {
-    const img = new Image();
-    img.src = imageSources[key];
-    images[key] = img;
-  });
-
   // ======= CONQUISTAS =======
   const ACHIEVEMENTS = [
     { id:'primeiro-voo',      icon:'🌠', name:'Primeiro Voo',       desc:'Termine sua primeira partida.' },
@@ -588,6 +568,7 @@
   closeAchievementsBtn.addEventListener('click', ()=>{
     achievementsOverlay.classList.add('hidden');
   });
+  // ======= FIM CONQUISTAS =======
 
   // ======= COMPARTILHAR PONTUAÇÃO =======
   const shareBtn = document.getElementById('shareBtn');
@@ -599,7 +580,7 @@
     unlockAchievement('divulgador');
     if(navigator.share){
       try{ await navigator.share({ title: 'Desvio Estelar', text, url }); }
-      catch(e){ /* cancelado */ }
+      catch(e){ /* usuário cancelou, tudo bem */ }
     } else {
       const waUrl = 'https://wa.me/?text=' + encodeURIComponent(text + ' ' + url);
       window.open(waUrl, '_blank');
@@ -607,6 +588,7 @@
   }
 
   shareBtn.addEventListener('click', shareScore);
+  // ======= FIM COMPARTILHAR =======
 
   let W, H, DPR;
   function resize(){
@@ -622,7 +604,10 @@
   window.addEventListener('resize', resize);
   resize();
 
-  // ======= FIREBASE =======
+  // ======= FIREBASE (ranking online) =======
+  // 1. Crie um projeto grátis em https://console.firebase.google.com
+  // 2. Ative o Firestore Database (modo produção)
+  // 3. Copie as chaves do seu projeto e cole aqui embaixo:
   const firebaseConfig = {
     apiKey: "AIzaSyAJ3Fa1vSx1EiEQ-wZyo3KComVPloa65VA",
     authDomain: "desvio-estelar.firebaseapp.com",
@@ -681,6 +666,7 @@
       rankList.innerHTML = html;
     } catch(e){
       rankList.innerHTML = '<div class="rank-empty">Não foi possível carregar o ranking.</div>';
+      console.warn(e);
     }
   }
 
@@ -690,6 +676,7 @@
     return d.innerHTML;
   }
 
+  // lembra o último nome digitado, só de conveniência local
   try{
     const savedName = window.localStorage ? window.localStorage.getItem('desvioEstelar_name') : null;
     if(savedName) nameField.value = savedName;
@@ -702,8 +689,9 @@
   closeRankingBtn.addEventListener('click', ()=>{
     rankingOverlay.classList.add('hidden');
   });
+  // ======= FIM FIREBASE =======
 
-  // ======= RECORDE =======
+  // ======= RECORDE (persistido no aparelho) =======
   let best = 0;
   try {
     const stored = parseInt(window.localStorage.getItem('desvioEstelar_best'), 10);
@@ -716,6 +704,7 @@
     scoreBestEl.textContent = best;
     try{ window.localStorage.setItem('desvioEstelar_best', String(best)); }catch(e){}
   }
+  // ======= FIM RECORDE =======
 
   // ======= SKINS =======
   const FOUNDER_CODE = 'adm nave';
@@ -848,8 +837,8 @@
   closeSkinsBtn.addEventListener('click', ()=>{
     skinsOverlay.classList.add('hidden');
   });
+  // ======= FIM SKINS =======
 
-  // ======= LÓGICA DO JOGO =======
   let ship, asteroids, particles, stars, score, speedMul, running, paused, dragX, keys, spawnTimer, elapsed;
   let planets = [], planetSpawnTimer = 0;
 
@@ -893,14 +882,11 @@
     running = true;
     paused = false;
     dragX = null;
+    lastMilestone = 0;
   }
 
   function spawnAsteroid(){
     const size = 16 + Math.random()*26;
-    let imgKey = 'asteroide-pequeno';
-    if(size > 32) imgKey = 'asteroide-grande';
-    else if(size > 24) imgKey = 'asteroide-medio';
-
     asteroids.push({
       x: Math.random()*(W-size*2) + size,
       y: -size*2,
@@ -908,8 +894,19 @@
       vy: (1.6 + Math.random()*1.4) * speedMul,
       rot: Math.random()*Math.PI*2,
       vrot: (Math.random()-0.5)*0.06,
-      imgKey: imgKey
+      shape: makeRockShape(size)
     });
+  }
+
+  function makeRockShape(r){
+    const pts = [];
+    const n = 8 + Math.floor(Math.random()*3);
+    for(let i=0;i<n;i++){
+      const ang = (i/n)*Math.PI*2;
+      const rad = r * (0.75 + Math.random()*0.4);
+      pts.push({ang, rad});
+    }
+    return pts;
   }
 
   function currentPlanetType(){
@@ -920,336 +917,678 @@
   function spawnPlanet(){
     const size = 55 + Math.random()*90;
     const type = currentPlanetType();
-    planets.push({
+    const planet = {
       x: Math.random()*W,
       y: -size*1.4,
       r: size,
       type: type,
-      vy: 0.25 + Math.random()*0.2
-    });
+      alpha: 0.55 + Math.random()*0.25
+    };
+
+    if(type === 'terra'){
+      planet.continents = [];
+      const n = 3 + Math.floor(Math.random()*3);
+      for(let i=0;i<n;i++){
+        planet.continents.push({
+          dx: (Math.random()-0.5)*1.6,
+          dy: (Math.random()-0.5)*1.6,
+          rx: size*(0.25+Math.random()*0.25),
+          ry: size*(0.18+Math.random()*0.2),
+          rot: Math.random()*Math.PI,
+          color: Math.random()<0.6 ? '#3f8f4f' : '#7a5c2f'
+        });
+      }
+    } else if(type === 'marte'){
+      planet.patches = [];
+      const n = 2 + Math.floor(Math.random()*3);
+      for(let i=0;i<n;i++){
+        planet.patches.push({
+          dx: (Math.random()-0.5)*1.5,
+          dy: (Math.random()-0.5)*1.5,
+          rx: size*(0.18+Math.random()*0.18),
+          ry: size*(0.12+Math.random()*0.14),
+          rot: Math.random()*Math.PI
+        });
+      }
+    } else if(type === 'jupiter'){
+      planet.bandOffsets = [-0.62,-0.32,-0.05,0.22,0.5];
+      planet.spotSide = Math.random() < 0.5 ? -1 : 1;
+    } else if(type === 'saturno'){
+      planet.ringTilt = -0.32 - Math.random()*0.1;
+    } else if(type === 'netuno'){
+      planet.stormDx = (Math.random()-0.5)*0.8;
+      planet.stormDy = (Math.random()-0.5)*0.6;
+    } else if(type === 'lua'){
+      planet.craters = [];
+      const n = 4 + Math.floor(Math.random()*4);
+      for(let i=0;i<n;i++){
+        const ang = Math.random()*Math.PI*2;
+        const dist = Math.random()*size*0.75;
+        planet.craters.push({
+          dx: Math.cos(ang)*dist,
+          dy: Math.sin(ang)*dist,
+          r: size*(0.08+Math.random()*0.12)
+        });
+      }
+    }
+
+    planets.push(planet);
+  }
+
+  function addThrust(){
+    const color = resolveSkinColors(getSelectedSkin()).thrust;
+    for(let i=0;i<2;i++){
+      particles.push({
+        x: ship.x + (Math.random()-0.5)*14,
+        y: ship.y + 16,
+        vx: (Math.random()-0.5)*0.6,
+        vy: 2 + Math.random()*1.5,
+        life: 1,
+        r: Math.random()*2.5+1,
+        color: color
+      });
+    }
+  }
+
+  function explode(x,y){
+    for(let i=0;i<26;i++){
+      const ang = Math.random()*Math.PI*2;
+      const spd = Math.random()*4+1;
+      particles.push({
+        x, y,
+        vx: Math.cos(ang)*spd,
+        vy: Math.sin(ang)*spd,
+        life: 1,
+        r: Math.random()*3+1.5,
+        color: Math.random()>0.5 ? '#ff5d73' : '#f5c542'
+      });
+    }
+  }
+
+  // ======= SOM (marcos de pontuação) =======
+  let audioCtx = null;
+  let lastMilestone = 0;
+
+  function getAudioCtx(){
+    if(!audioCtx){
+      try{ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch(e){ return null; }
+    }
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  function playLaserSound(){
+    const ctx = getAudioCtx();
+    if(!ctx) return;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sawtooth';
+    const now = ctx.currentTime;
+    osc.frequency.setValueAtTime(1100, now);
+    osc.frequency.exponentialRampToValueAtTime(220, now + 0.18);
+    gain.gain.setValueAtTime(0.15, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.22);
   }
 
   function updateLaserUI(){
     laserCount.textContent = 'x' + laserCharges;
-    if(laserCharges <= 0){
-      laserBtn.classList.add('depleted');
-    } else {
-      laserBtn.classList.remove('depleted');
-    }
+    laserBtn.classList.toggle('depleted', laserCharges <= 0);
   }
 
   function fireLaser(){
     if(!running || paused || laserCharges <= 0) return;
     laserCharges--;
     updateLaserUI();
+    playLaserSound();
+
+    const corridorHalfWidth = 26;
+    const laserColor = resolveSkinColors(getSelectedSkin()).laser;
     laserBeams.push({
       x: ship.x,
-      y: ship.y - 15,
-      w: 8,
-      life: 0.25
+      y0: ship.y - 14,
+      y1: 0,
+      life: 1,
+      color: laserColor
     });
 
-    const skin = resolveSkinColors(getSelectedSkin());
-    for(let i=asteroids.length-1; i>=0; i--){
-      const ast = asteroids[i];
-      if(Math.abs(ast.x - ship.x) < ast.r + 12){
-        createExplosion(ast.x, ast.y, skin.laser, 14);
-        asteroids.splice(i, 1);
+    const survivors = [];
+    asteroids.forEach(a=>{
+      if(Math.abs(a.x - ship.x) <= corridorHalfWidth + a.r && a.y < ship.y){
+        explode(a.x, a.y);
+        score += Math.floor(a.r); // pequeno bônus por asteroide destruído
         gameStats.laserKills++;
-        if(gameStats.laserKills >= 10) unlockAchievement('atirador');
-      }
-    }
-  }
-
-  function createExplosion(x, y, color, count=10){
-    for(let i=0; i<count; i++){
-      const ang = Math.random()*Math.PI*2;
-      const spd = 1 + Math.random()*4;
-      particles.push({
-        x: x, y: y,
-        vx: Math.cos(ang)*spd,
-        vy: Math.sin(ang)*spd,
-        r: 1.5 + Math.random()*2,
-        color: color,
-        life: 1.0,
-        decay: 0.02 + Math.random()*0.03
-      });
-    }
-  }
-
-  // Controles
-  keys = {};
-  window.addEventListener('keydown', e => {
-    keys[e.key] = true;
-    if(e.key === ' ' || e.key === 'Spacebar') fireLaser();
-  });
-  window.addEventListener('keyup', e => { keys[e.key] = false; });
-
-  wrap.addEventListener('pointerdown', e => {
-    if(!running || paused) return;
-    dragX = e.clientX;
-  });
-  wrap.addEventListener('pointermove', e => {
-    if(!running || paused || dragX === null) return;
-    const dx = e.clientX - dragX;
-    ship.targetX += dx;
-    dragX = e.clientX;
-  });
-  wrap.addEventListener('pointerup', () => { dragX = null; });
-  wrap.addEventListener('pointercancel', () => { dragX = null; });
-
-  startBtn.addEventListener('click', () => {
-    const name = nameField.value.trim();
-    if(name) {
-      try{ window.localStorage.setItem('desvioEstelar_name', name); }catch(e){}
-    }
-    overlay.classList.add('hidden');
-    pauseBtn.classList.remove('hidden');
-    laserBtn.classList.remove('hidden');
-    resetGame();
-  });
-
-  pauseBtn.addEventListener('click', () => {
-    if(!running) return;
-    paused = true;
-    pauseOverlay.classList.remove('hidden');
-  });
-
-  resumeBtn.addEventListener('click', () => {
-    paused = false;
-    pauseOverlay.classList.add('hidden');
-  });
-
-  initStars();
-
-  let lastTime = performance.now();
-  function loop(now){
-    requestAnimationFrame(loop);
-    const dt = Math.min((now - lastTime)/1000, 0.1);
-    lastTime = now;
-
-    ctx.clearRect(0, 0, W, H);
-
-    // Desenhar estrelas
-    ctx.fillStyle = '#f4f0ff';
-    stars.forEach(s => {
-      s.tw += dt * 2;
-      const alpha = 0.3 + Math.sin(s.tw)*0.2;
-      ctx.globalAlpha = alpha;
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
-      ctx.fill();
-      if(running && !paused){
-        s.y += s.speed * speedMul;
-        if(s.y > H) { s.y = -2; s.x = Math.random()*W; }
-      }
-    });
-    ctx.globalAlpha = 1.0;
-
-    if(!running){
-      return;
-    }
-
-    if(!paused){
-      elapsed += dt;
-      score = Math.floor(elapsed * 10);
-      scoreNowEl.textContent = score;
-
-      speedMul = 1 + Math.min(elapsed / 60, 2.5);
-
-      // Conquistas por pontuação e tempo
-      if(score >= 1000) unlockAchievement('mil-pontos');
-      if(score >= 10000) unlockAchievement('dez-mil-pontos');
-      if(elapsed >= 120) unlockAchievement('sobrevivente');
-      if(elapsed >= 300) unlockAchievement('resistente');
-
-      // Teclado
-      if(keys['ArrowLeft'] || keys['a']) ship.targetX -= 5 * speedMul;
-      if(keys['ArrowRight'] || keys['d']) ship.targetX += 5 * speedMul;
-
-      ship.targetX = Math.max(ship.w/2, Math.min(W - ship.w/2, ship.targetX));
-      ship.x += (ship.targetX - ship.x) * 0.2;
-
-      // Planetas
-      planetSpawnTimer -= dt;
-      if(planetSpawnTimer <= 0){
-        spawnPlanet();
-        planetSpawnTimer = 18 + Math.random()*12;
-      }
-      for(let i=planets.length-1; i>=0; i--){
-        const p = planets[i];
-        p.y += p.vy * speedMul;
-        if(p.y - p.r > H) planets.splice(i, 1);
-      }
-
-      // Asteroides
-      spawnTimer -= dt;
-      if(spawnTimer <= 0){
-        spawnAsteroid();
-        spawnTimer = Math.max(0.25, 1.2 / speedMul);
-      }
-
-      for(let i=asteroids.length-1; i>=0; i--){
-        const ast = asteroids[i];
-        ast.y += ast.vy;
-        ast.rot += ast.vrot;
-
-        // Raspando / Quase bateu
-        const dist = Math.hypot(ast.x - ship.x, ast.y - ship.y);
-        if(dist < ast.r + ship.w && dist > ast.r + 10){
-          unlockAchievement('por-pouco');
-        }
-
-        // Colisão
-        if(dist < ast.r + 10){
-          gameOver();
-          break;
-        }
-
-        if(ast.y - ast.r > H) asteroids.splice(i, 1);
-      }
-
-      // Laser
-      for(let i=laserBeams.length-1; i>=0; i--){
-        const beam = laserBeams[i];
-        beam.life -= dt;
-        if(beam.life <= 0) laserBeams.splice(i, 1);
-      }
-
-      // Partículas
-      for(let i=particles.length-1; i>=0; i--){
-        const pt = particles[i];
-        pt.x += pt.vx;
-        pt.y += pt.vy;
-        pt.life -= pt.decay;
-        if(pt.life <= 0) particles.splice(i, 1);
-      }
-    }
-
-    // Desenhar Planetas (Imagens)
-    planets.forEach(p => {
-      const img = images[p.type];
-      if(img && img.complete){
-        ctx.globalAlpha = 0.6;
-        ctx.drawImage(img, p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
-        ctx.globalAlpha = 1.0;
-      }
-    });
-
-    // Desenhar Asteroides (Imagens)
-    asteroids.forEach(ast => {
-      const img = images[ast.imgKey];
-      ctx.save();
-      ctx.translate(ast.x, ast.y);
-      ctx.rotate(ast.rot);
-      if(img && img.complete){
-        ctx.drawImage(img, -ast.r, -ast.r, ast.r * 2, ast.r * 2);
       } else {
-        ctx.fillStyle = '#888';
-        ctx.beginPath();
-        ctx.arc(0, 0, ast.r, 0, Math.PI*2);
-        ctx.fill();
+        survivors.push(a);
       }
-      ctx.restore();
+    });
+    asteroids = survivors;
+    saveAchievementState();
+    if(gameStats.laserKills >= 10){
+      unlockAchievement('atirador');
+    }
+  }
+
+  // disparo já é feito no pointerdown (mais rápido e confiável em multitoque)
+  // ======= FIM LASER =======
+
+  function playMilestoneChime(level){
+    const ctx = getAudioCtx();
+    if(!ctx) return;
+    const baseFreq = 520 + Math.min(level, 10) * 60; // fica mais agudo a cada marco
+    const notes = [baseFreq, baseFreq * 1.25, baseFreq * 1.5];
+    notes.forEach((freq, i)=>{
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const startAt = ctx.currentTime + i * 0.09;
+      gain.gain.setValueAtTime(0, startAt);
+      gain.gain.linearRampToValueAtTime(0.18, startAt + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, startAt + 0.28);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(startAt);
+      osc.stop(startAt + 0.3);
+    });
+  }
+
+  function checkScoreMilestone(){
+    const milestone = Math.floor(score / 1000);
+    if(milestone > lastMilestone){
+      lastMilestone = milestone;
+      playMilestoneChime(milestone);
+    }
+  }
+  // ======= FIM SOM =======
+
+  function checkLiveAchievements(){
+    if(score >= 1000) unlockAchievement('mil-pontos');
+    if(score >= 10000) unlockAchievement('dez-mil-pontos');
+    if(elapsed >= 120) unlockAchievement('sobrevivente');
+    if(elapsed >= 300) unlockAchievement('resistente');
+  }
+
+  function update(dt){
+    elapsed += dt;
+    speedMul = 1 + elapsed/22;
+    score += dt * 12 * speedMul;
+    checkScoreMilestone();
+    checkLiveAchievements();
+
+    // stars
+    stars.forEach(s=>{
+      s.y += s.speed * speedMul;
+      if(s.y > H){ s.y = 0; s.x = Math.random()*W; }
     });
 
-    // Desenhar Laser
-    const skin = resolveSkinColors(getSelectedSkin());
-    laserBeams.forEach(beam => {
-      ctx.strokeStyle = skin.laser;
-      ctx.lineWidth = beam.w;
-      ctx.shadowColor = skin.laser;
-      ctx.shadowBlur = 12;
-      ctx.beginPath();
-      ctx.moveTo(beam.x, beam.y);
-      ctx.lineTo(beam.x, 0);
-      ctx.stroke();
-      ctx.shadowBlur = 0;
+    // planets (fundo, puramente decorativo)
+    planetSpawnTimer -= dt;
+    if(planetSpawnTimer <= 0){
+      spawnPlanet();
+      planetSpawnTimer = 9 + Math.random()*7;
+    }
+    planets.forEach(p=>{
+      p.y += 0.35 * speedMul;
     });
+    planets = planets.filter(p=> p.y - p.r < H + 60);
 
-    // Desenhar Partículas
-    particles.forEach(pt => {
-      ctx.globalAlpha = pt.life;
-      ctx.fillStyle = pt.color;
-      ctx.beginPath();
-      ctx.arc(pt.x, pt.y, pt.r, 0, Math.PI*2);
-      ctx.fill();
+    // ship movement toward target (horizontal + vertical)
+    const dx = ship.targetX - ship.x;
+    ship.x += dx * 0.18;
+    ship.x = Math.max(ship.w, Math.min(W-ship.w, ship.x));
+
+    const dy = ship.targetY - ship.y;
+    ship.y += dy * 0.18;
+    ship.y = Math.max(ship.h, Math.min(H-ship.h*0.6, ship.y));
+
+    if(Math.random() < 0.6) addThrust();
+
+    // particles
+    particles.forEach(p=>{
+      p.x += p.vx; p.y += p.vy; p.life -= 0.03;
     });
-    ctx.globalAlpha = 1.0;
+    particles = particles.filter(p=>p.life>0);
 
-    // Desenhar Nave
-    ctx.save();
-    ctx.translate(ship.x, ship.y);
+    // laser beams
+    laserBeams.forEach(b=>{ b.life -= 0.12; });
+    laserBeams = laserBeams.filter(b=>b.life>0);
 
-    // Brilho do Propulsor
-    ctx.fillStyle = skin.thrust;
-    ctx.shadowColor = skin.thrust;
-    ctx.shadowBlur = 10;
-    ctx.beginPath();
-    ctx.moveTo(-6, 16);
-    ctx.lineTo(6, 16);
-    ctx.lineTo(0, 24 + Math.random()*6);
-    ctx.closePath();
-    ctx.fill();
-    ctx.shadowBlur = 0;
+    // spawn asteroids
+    spawnTimer -= dt;
+    const spawnRate = Math.max(0.35, 0.95 - elapsed*0.012);
+    if(spawnTimer <= 0){
+      spawnAsteroid();
+      spawnTimer = spawnRate;
+    }
 
-    // Corpo da Nave
-    ctx.fillStyle = skin.hull;
-    ctx.beginPath();
-    ctx.moveTo(0, -18);
-    ctx.lineTo(14, 16);
-    ctx.lineTo(0, 10);
-    ctx.lineTo(-14, 16);
-    ctx.closePath();
-    ctx.fill();
+    // asteroids
+    asteroids.forEach(a=>{
+      a.y += a.vy;
+      a.rot += a.vrot;
+    });
+    asteroids = asteroids.filter(a=> a.y - a.r < H + 40);
 
-    // Detalhe Interior
-    ctx.fillStyle = skin.inner;
-    ctx.beginPath();
-    ctx.moveTo(0, -6);
-    ctx.lineTo(7, 11);
-    ctx.lineTo(0, 7);
-    ctx.lineTo(-7, 11);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.restore();
+    // collision
+    for(const a of asteroids){
+      const ddx = a.x - ship.x;
+      const ddy = a.y - (ship.y+6);
+      const dist = Math.sqrt(ddx*ddx+ddy*ddy);
+      const collisionR = a.r*0.82 + 12;
+      if(dist < collisionR){
+        gameOver();
+        break;
+      } else if(dist < collisionR + 16){
+        unlockAchievement('por-pouco');
+      }
+    }
   }
 
   function gameOver(){
     running = false;
     pauseBtn.classList.add('hidden');
     laserBtn.classList.add('hidden');
-
-    const skin = resolveSkinColors(getSelectedSkin());
-    createExplosion(ship.x, ship.y, skin.hull, 25);
+    explode(ship.x, ship.y);
+    if(navigator.vibrate) navigator.vibrate([40, 30, 80]);
+    const finalScore = Math.floor(score);
+    lastFinalScore = finalScore;
 
     gameStats.gamesPlayed++;
+    saveAchievementState();
     unlockAchievement('primeiro-voo');
     if(gameStats.gamesPlayed >= 20) unlockAchievement('veterano');
     if(laserCharges === 3) unlockAchievement('sem-perder-laser');
 
-    lastFinalScore = score;
-    if(score > best){
-      saveBest(score);
+    let newlyUnlocked = [];
+    if(finalScore > best){
+      saveBest(finalScore);
+      newlyUnlocked = checkSkinUnlocks(finalScore);
     }
-
-    checkSkinUnlocks(best);
-    saveAchievementState();
-
-    const playerNumName = nameField.value.trim();
-    if(playerNumName){
-      saveScoreOnline(playerNumName, score);
+    const playerName = nameField.value.trim();
+    if(playerName){
+      try{ if(window.localStorage) window.localStorage.setItem('desvioEstelar_name', playerName); } catch(e){}
+      saveScoreOnline(playerName, finalScore);
     }
-
-    msgText.innerHTML = '<div class="score-final">Pontuação: <b>'+score+'</b></div>Fim de jogo! Tente desviar com mais atenção da próxima vez.';
-    startBtn.textContent = 'Jogar de Novo';
-    shareBtn.classList.remove('hidden');
-    overlay.classList.remove('hidden');
+    setTimeout(()=>{
+      let msg = 'Você marcou <b style="color:#f5c542">' + finalScore + '</b> pontos.<br>Os asteroides pegaram você.<br>Tenta de novo?';
+      if(newlyUnlocked.length){
+        const names = newlyUnlocked.map(s=>s.name).join(', ');
+        msg += '<br><br><b style="color:#7ce8d8">Nova nave desbloqueada: ' + names + '!</b>';
+      }
+      msgText.innerHTML = msg;
+      startBtn.textContent = 'Jogar de novo';
+      shareBtn.classList.remove('hidden');
+      overlay.classList.remove('hidden');
+    }, 500);
   }
 
+  function drawShip(){
+    ctx.save();
+    ctx.translate(ship.x, ship.y);
+    const skin = resolveSkinColors(getSelectedSkin());
+    // glow
+    ctx.shadowColor = skin.glow;
+    ctx.shadowBlur = 14;
+    ctx.fillStyle = skin.hull;
+    ctx.beginPath();
+    ctx.moveTo(0, -20);
+    ctx.lineTo(13, 18);
+    ctx.lineTo(0, 11);
+    ctx.lineTo(-13, 18);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = skin.inner;
+    ctx.beginPath();
+    ctx.moveTo(0,-8);
+    ctx.lineTo(6,6);
+    ctx.lineTo(0,2);
+    ctx.lineTo(-6,6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawAsteroid(a){
+    ctx.save();
+    ctx.translate(a.x, a.y);
+    ctx.rotate(a.rot);
+    ctx.beginPath();
+    a.shape.forEach((p,i)=>{
+      const x = Math.cos(p.ang)*p.rad;
+      const y = Math.sin(p.ang)*p.rad;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.closePath();
+    ctx.fillStyle = '#3a3352';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(124,232,216,0.35)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  const PLANET_BASE_COLORS = {
+    terra:   { hi:'#6fc4f0', base:'#123d7a' },
+    marte:   { hi:'#e08a52', base:'#8a3d1f' },
+    jupiter: { hi:'#e8c48a', base:'#a8642e' },
+    saturno: { hi:'#f2e3b8', base:'#c9a05f' },
+    netuno:  { hi:'#6f8fe8', base:'#1a2a7a' },
+    lua:     { hi:'#dcdcdc', base:'#83838f' }
+  };
+
+  function drawSphereBase(p){
+    const c = PLANET_BASE_COLORS[p.type];
+    const grad = ctx.createRadialGradient(
+      p.x - p.r*0.35, p.y - p.r*0.35, p.r*0.15,
+      p.x, p.y, p.r
+    );
+    grad.addColorStop(0, c.hi);
+    grad.addColorStop(1, c.base);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  function clipToSphere(p){
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+    ctx.clip();
+  }
+
+  function drawPlanet(p){
+    ctx.save();
+    ctx.globalAlpha = p.alpha;
+
+    // Saturno: anéis atrás do planeta
+    if(p.type === 'saturno'){
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.ringTilt);
+      ctx.scale(1, 0.3);
+      const ringBands = [
+        { r: p.r*1.75, w: p.r*0.16, color:'#8a6f45' },
+        { r: p.r*1.5,  w: p.r*0.2,  color:'#f2e3b8' },
+        { r: p.r*1.25, w: p.r*0.12, color:'#c9a05f' }
+      ];
+      ringBands.forEach(band=>{
+        ctx.beginPath();
+        ctx.arc(0, 0, band.r, 0, Math.PI*2);
+        ctx.strokeStyle = band.color;
+        ctx.lineWidth = band.w;
+        ctx.globalAlpha = p.alpha*0.75;
+        ctx.stroke();
+      });
+      ctx.restore();
+      ctx.globalAlpha = p.alpha;
+    }
+
+    drawSphereBase(p);
+
+    ctx.save();
+    clipToSphere(p);
+
+    if(p.type === 'terra'){
+      p.continents.forEach(c=>{
+        ctx.save();
+        ctx.translate(p.x + c.dx*p.r*0.5, p.y + c.dy*p.r*0.5);
+        ctx.rotate(c.rot);
+        ctx.fillStyle = c.color;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, c.rx, c.ry, 0, 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+      });
+      // nuvens
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.beginPath();
+      ctx.ellipse(p.x - p.r*0.3, p.y + p.r*0.2, p.r*0.4, p.r*0.14, 0.3, 0, Math.PI*2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(p.x + p.r*0.35, p.y - p.r*0.35, p.r*0.3, p.r*0.11, -0.4, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    else if(p.type === 'marte'){
+      ctx.fillStyle = 'rgba(120,50,20,0.55)';
+      p.patches.forEach(patch=>{
+        ctx.save();
+        ctx.translate(p.x + patch.dx*p.r*0.5, p.y + patch.dy*p.r*0.5);
+        ctx.rotate(patch.rot);
+        ctx.beginPath();
+        ctx.ellipse(0, 0, patch.rx, patch.ry, 0, 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+      });
+      // calota polar
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y - p.r*0.78, p.r*0.32, p.r*0.16, 0, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    else if(p.type === 'jupiter'){
+      const colors = ['#c97f3a','#e8c48a','#b8703a','#e8c48a','#c97f3a'];
+      p.bandOffsets.forEach((off, i)=>{
+        ctx.fillStyle = colors[i % colors.length];
+        ctx.globalAlpha = p.alpha*0.55;
+        ctx.fillRect(p.x - p.r, p.y + off*p.r, p.r*2, p.r*0.16);
+      });
+      ctx.globalAlpha = p.alpha;
+      // Grande Mancha Vermelha
+      ctx.fillStyle = 'rgba(200,80,60,0.8)';
+      ctx.beginPath();
+      ctx.ellipse(p.x + p.spotSide*p.r*0.4, p.y + p.r*0.15, p.r*0.22, p.r*0.13, 0, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    else if(p.type === 'netuno'){
+      ctx.fillStyle = 'rgba(255,255,255,0.3)';
+      ctx.beginPath();
+      ctx.ellipse(p.x + p.stormDx*p.r, p.y + p.stormDy*p.r, p.r*0.22, p.r*0.14, 0.5, 0, Math.PI*2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.lineWidth = p.r*0.05;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y + p.r*0.35, p.r*0.85, p.r*0.15, 0, 0, Math.PI*2);
+      ctx.stroke();
+    }
+
+    else if(p.type === 'lua'){
+      ctx.fillStyle = 'rgba(90,90,95,0.55)';
+      p.craters.forEach(cr=>{
+        ctx.beginPath();
+        ctx.arc(p.x + cr.dx, p.y + cr.dy, cr.r, 0, Math.PI*2);
+        ctx.fill();
+      });
+    }
+
+    ctx.restore();
+
+    // Saturno: aro frontal por cima do planeta
+    if(p.type === 'saturno'){
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.ringTilt);
+      ctx.scale(1, 0.3);
+      ctx.beginPath();
+      ctx.arc(0, 0, p.r*1.5, Math.PI*0.08, Math.PI*0.92);
+      ctx.strokeStyle = '#f2e3b8';
+      ctx.lineWidth = p.r*0.18;
+      ctx.globalAlpha = p.alpha*0.9;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+
+    // planetas de fundo (mais distantes que tudo)
+    planets.forEach(drawPlanet);
+    ctx.globalAlpha = 1;
+
+    // stars
+    stars.forEach(s=>{
+      s.tw += 0.05;
+      const a = 0.4 + Math.sin(s.tw)*0.3;
+      ctx.globalAlpha = Math.max(0.1,a);
+      ctx.fillStyle = '#f4f0ff';
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
+    // particles
+    particles.forEach(p=>{
+      ctx.globalAlpha = Math.max(0,p.life);
+      ctx.fillStyle = p.color || '#7ce8d8';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
+    // laser beams
+    laserBeams.forEach(b=>{
+      ctx.globalAlpha = Math.max(0, b.life);
+      ctx.strokeStyle = b.color || '#ff5d73';
+      ctx.lineWidth = 6;
+      ctx.shadowColor = b.color || 'rgba(255,93,115,0.8)';
+      ctx.shadowBlur = 16;
+      ctx.beginPath();
+      ctx.moveTo(b.x, b.y0);
+      ctx.lineTo(b.x, b.y1);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    });
+    ctx.globalAlpha = 1;
+
+    asteroids.forEach(drawAsteroid);
+    if(running) drawShip();
+
+    scoreNowEl.textContent = Math.floor(score);
+  }
+
+  let lastTime = null;
+  function loop(t){
+    if(lastTime===null) lastTime = t;
+    let dt = (t - lastTime)/1000;
+    dt = Math.min(dt, 0.05);
+    lastTime = t;
+    if(running && !paused) update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // Controls
+  let dragPointerId = null;
+
+  const TOUCH_OFFSET_Y = 70; // distância que a nave fica acima do dedo
+
+  function setTargetFromClient(clientX, clientY){
+    const rect = wrap.getBoundingClientRect();
+    ship.targetX = clientX - rect.left;
+    ship.targetY = clientY - rect.top - TOUCH_OFFSET_Y;
+  }
+
+  wrap.addEventListener('pointerdown', (e)=>{
+    if(!running || paused) return;
+    dragX = e.clientX;
+    dragPointerId = e.pointerId;
+    setTargetFromClient(e.clientX, e.clientY);
+  });
+  wrap.addEventListener('pointermove', (e)=>{
+    if(!running || paused || dragX===null) return;
+    if(e.pointerId !== dragPointerId) return;
+    setTargetFromClient(e.clientX, e.clientY);
+  });
+  window.addEventListener('pointerup', (e)=>{
+    if(e.pointerId === dragPointerId){
+      dragX = null;
+      dragPointerId = null;
+    }
+  });
+
+  keys = {};
+  window.addEventListener('keydown', (e)=>{
+    const typing = document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
+    if(typing) return;
+    if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','a','d','w','s','A','D','W','S'].includes(e.key)) e.preventDefault();
+    keys[e.key] = true;
+  });
+  window.addEventListener('keyup', (e)=>{ keys[e.key] = false; });
+
+  function keyboardLoop(){
+    if(running && !paused){
+      if(keys['ArrowLeft'] || keys['a'] || keys['A']) ship.targetX -= 9;
+      if(keys['ArrowRight'] || keys['d'] || keys['D']) ship.targetX += 9;
+      if(keys['ArrowUp'] || keys['w'] || keys['W']) ship.targetY -= 9;
+      if(keys['ArrowDown'] || keys['s'] || keys['S']) ship.targetY += 9;
+      ship.targetX = Math.max(20, Math.min(W-20, ship.targetX));
+      ship.targetY = Math.max(20, Math.min(H-20, ship.targetY));
+    }
+    requestAnimationFrame(keyboardLoop);
+  }
+
+  function togglePause(){
+    if(!running) return;
+    paused = !paused;
+    pauseOverlay.classList.toggle('hidden', !paused);
+    dragX = null;
+  }
+
+  pauseBtn.addEventListener('click', togglePause);
+  resumeBtn.addEventListener('click', togglePause);
+  window.addEventListener('keydown', (e)=>{
+    const typing = document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
+    if(typing) return;
+    if(e.key === 'p' || e.key === 'P' || e.key === 'Escape'){
+      togglePause();
+    }
+    if(e.key === ' '){
+      e.preventDefault();
+      fireLaser();
+    }
+  });
+
+  function startGame(){
+    resize();
+    initStars();
+    resetGame();
+    overlay.classList.add('hidden');
+    pauseOverlay.classList.add('hidden');
+    pauseBtn.classList.remove('hidden');
+    laserBtn.classList.remove('hidden');
+    shareBtn.classList.add('hidden');
+  }
+
+  startBtn.addEventListener('click', startGame);
+
+  initStars();
+  ship = { x: W/2, y: H-110, w:30, h:38, targetX: W/2, trail: [] };
+  asteroids = [];
+  particles = [];
+  score = 0;
+  running = false;
   requestAnimationFrame(loop);
+  requestAnimationFrame(keyboardLoop);
+
+  // Service Worker (permite jogar offline após a primeira visita)
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', ()=>{
+      navigator.serviceWorker.register('sw.js').catch(e=>console.warn('SW não registrado:', e));
+    });
+  }
 })();
 </script>
 </body>
-</html>
+  </html>
