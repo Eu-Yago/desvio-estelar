@@ -502,7 +502,7 @@
 
   // ======= CONQUISTAS =======
   const ACHIEVEMENTS = [
-    { id:'primeiro-voo',      icon:'🌠', name:'Primeiro Voo',       desc:'Termine sua primeira partida.' },
+    { id:'primeiro-voo',      icon:'🌠', name:'Primeiro Voo',        desc:'Termine sua primeira partida.' },
     { id:'mil-pontos',        icon:'⭐', name:'1.000 Pontos',        desc:'Alcance 1.000 pontos numa partida.' },
     { id:'dez-mil-pontos',    icon:'🌟', name:'10.000 Pontos',       desc:'Alcance 10.000 pontos numa partida.' },
     { id:'sobrevivente',      icon:'⏱️', name:'Sobrevivente',        desc:'Fique vivo por 2 minutos numa partida.' },
@@ -942,65 +942,95 @@
     if(!running || paused || laserCharges <= 0) return;
     laserCharges--;
     updateLaserUI();
+
     laserBeams.push({
       x: ship.x,
-      y: ship.y - 15,
-      w: 8,
-      life: 0.25
+      y: ship.y - 18,
+      w: 6,
+      h: 28,
+      vy: 16
     });
 
-    const skin = resolveSkinColors(getSelectedSkin());
-    for(let i=asteroids.length-1; i>=0; i--){
-      const ast = asteroids[i];
-      if(Math.abs(ast.x - ship.x) < ast.r + 12){
-        createExplosion(ast.x, ast.y, skin.laser, 14);
-        asteroids.splice(i, 1);
-        gameStats.laserKills++;
-        if(gameStats.laserKills >= 10) unlockAchievement('atirador');
-      }
-    }
-  }
-
-  function createExplosion(x, y, color, count=10){
-    for(let i=0; i<count; i++){
-      const ang = Math.random()*Math.PI*2;
-      const spd = 1 + Math.random()*4;
+    for(let i=0; i<12; i++){
       particles.push({
-        x: x, y: y,
-        vx: Math.cos(ang)*spd,
-        vy: Math.sin(ang)*spd,
-        r: 1.5 + Math.random()*2,
-        color: color,
-        life: 1.0,
-        decay: 0.02 + Math.random()*0.03
+        x: ship.x,
+        y: ship.y - 18,
+        vx: (Math.random()-0.5)*3,
+        vy: -Math.random()*4 - 2,
+        r: Math.random()*2 + 1,
+        life: 1,
+        decay: 0.05,
+        color: resolveSkinColors(getSelectedSkin()).laser
       });
     }
   }
 
-  // Controles
-  keys = {};
-  window.addEventListener('keydown', e => {
-    keys[e.key] = true;
-    if(e.key === ' ' || e.key === 'Spacebar') fireLaser();
-  });
-  window.addEventListener('keyup', e => { keys[e.key] = false; });
+  function createExplosion(x, y, color, count=25){
+    for(let i=0; i<count; i++){
+      const ang = Math.random()*Math.PI*2;
+      const spd = Math.random()*4 + 1;
+      particles.push({
+        x: x,
+        y: y,
+        vx: Math.cos(ang)*spd,
+        vy: Math.sin(ang)*spd,
+        r: Math.random()*3 + 1,
+        life: 1,
+        decay: Math.random()*0.03 + 0.02,
+        color: color
+      });
+    }
+  }
 
-  wrap.addEventListener('pointerdown', e => {
+  // ======= CONTROLES =======
+  keys = {};
+  window.addEventListener('keydown', (e)=>{
+    keys[e.key] = true;
+    if(e.key === ' ' || e.key === 'p' || e.key === 'P'){
+      togglePause();
+    }
+    if(e.key === 'f' || e.key === 'F' || e.key === 'Control'){
+      fireLaser();
+    }
+  });
+  window.addEventListener('keyup', (e)=>{ keys[e.key] = false; });
+
+  function handlePointer(clientX){
+    const rect = canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    ship.targetX = Math.max(ship.w/2, Math.min(W - ship.w/2, x));
+  }
+
+  wrap.addEventListener('pointerdown', (e)=>{
     if(!running || paused) return;
     dragX = e.clientX;
+    handlePointer(e.clientX);
   });
-  wrap.addEventListener('pointermove', e => {
-    if(!running || paused || dragX === null) return;
-    const dx = e.clientX - dragX;
-    ship.targetX += dx;
-    dragX = e.clientX;
-  });
-  wrap.addEventListener('pointerup', () => { dragX = null; });
-  wrap.addEventListener('pointercancel', () => { dragX = null; });
 
-  startBtn.addEventListener('click', () => {
+  wrap.addEventListener('pointermove', (e)=>{
+    if(!running || paused || dragX === null) return;
+    handlePointer(e.clientX);
+  });
+
+  window.addEventListener('pointerup', ()=>{ dragX = null; });
+  window.addEventListener('pointercancel', ()=>{ dragX = null; });
+
+  pauseBtn.addEventListener('click', togglePause);
+  resumeBtn.addEventListener('click', togglePause);
+
+  function togglePause(){
+    if(!running) return;
+    paused = !paused;
+    if(paused){
+      pauseOverlay.classList.remove('hidden');
+    } else {
+      pauseOverlay.classList.add('hidden');
+    }
+  }
+
+  startBtn.addEventListener('click', ()=>{
     const name = nameField.value.trim();
-    if(name) {
+    if(name && window.localStorage){
       try{ window.localStorage.setItem('desvioEstelar_name', name); }catch(e){}
     }
     overlay.classList.add('hidden');
@@ -1009,143 +1039,224 @@
     resetGame();
   });
 
-  pauseBtn.addEventListener('click', () => {
-    if(!running) return;
-    paused = true;
-    pauseOverlay.classList.remove('hidden');
-  });
+  function gameOver(){
+    running = false;
+    pauseBtn.classList.add('hidden');
+    laserBtn.classList.add('hidden');
+    lastFinalScore = Math.floor(score);
 
-  resumeBtn.addEventListener('click', () => {
-    paused = false;
-    pauseOverlay.classList.add('hidden');
-  });
+    gameStats.gamesPlayed = (gameStats.gamesPlayed || 0) + 1;
+    unlockAchievement('primeiro-voo');
+    if(gameStats.gamesPlayed >= 20) unlockAchievement('veterano');
+    if(lastFinalScore >= 1000) unlockAchievement('mil-pontos');
+    if(lastFinalScore >= 10000) unlockAchievement('dez-mil-pontos');
+    if(elapsed >= 120) unlockAchievement('sobrevivente');
+    if(elapsed >= 300) unlockAchievement('resistente');
+    if(laserCharges === 3) unlockAchievement('sem-perder-laser');
 
-  initStars();
+    saveAchievementState();
 
+    if(lastFinalScore > best){
+      saveBest(lastFinalScore);
+    }
+
+    const name = nameField.value.trim();
+    if(name){
+      saveScoreOnline(name, lastFinalScore);
+    }
+
+    const newlyUnlocked = checkSkinUnlocks(best);
+
+    createExplosion(ship.x, ship.y, '#ff5d73', 40);
+
+    setTimeout(()=>{
+      let unlockMsg = '';
+      if(newlyUnlocked.length){
+        unlockMsg = '<br><span style="color:var(--gold)">🎉 Nova nave desbloqueada: ' + newlyUnlocked.map(s=>s.name).join(', ') + '!</span>';
+      }
+      msgText.innerHTML = '<div class="score-final">Pontuação: <b>'+lastFinalScore+'</b></div>' +
+        'Recorde: '+best + unlockMsg + '<br><br>Toque em "Começar" para jogar novamente.';
+      shareBtn.classList.remove('hidden');
+      startBtn.textContent = 'Jogar de Novo';
+      overlay.classList.remove('hidden');
+    }, 600);
+  }
+
+  // ======= LOOP PRINCIPAL =======
   let lastTime = performance.now();
+
   function loop(now){
     requestAnimationFrame(loop);
     const dt = Math.min((now - lastTime)/1000, 0.1);
     lastTime = now;
 
-    ctx.clearRect(0, 0, W, H);
-
-    // Desenhar estrelas
-    ctx.fillStyle = '#f4f0ff';
-    stars.forEach(s => {
-      s.tw += dt * 2;
-      const alpha = 0.3 + Math.sin(s.tw)*0.2;
-      ctx.globalAlpha = alpha;
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
-      ctx.fill();
-      if(running && !paused){
-        s.y += s.speed * speedMul;
-        if(s.y > H) { s.y = -2; s.x = Math.random()*W; }
-      }
-    });
-    ctx.globalAlpha = 1.0;
-
     if(!running){
+      drawStaticBackground();
       return;
     }
 
     if(!paused){
-      elapsed += dt;
-      score = Math.floor(elapsed * 10);
-      scoreNowEl.textContent = score;
+      update(dt);
+    }
+    render();
+  }
 
-      speedMul = 1 + Math.min(elapsed / 60, 2.5);
+  function update(dt){
+    elapsed += dt;
+    score += dt * 15 * speedMul;
+    scoreNowEl.textContent = Math.floor(score);
 
-      // Conquistas por pontuação e tempo
-      if(score >= 1000) unlockAchievement('mil-pontos');
-      if(score >= 10000) unlockAchievement('dez-mil-pontos');
-      if(elapsed >= 120) unlockAchievement('sobrevivente');
-      if(elapsed >= 300) unlockAchievement('resistente');
+    speedMul = 1 + Math.floor(elapsed / 10) * 0.08;
 
-      // Teclado
-      if(keys['ArrowLeft'] || keys['a']) ship.targetX -= 5 * speedMul;
-      if(keys['ArrowRight'] || keys['d']) ship.targetX += 5 * speedMul;
+    // Movimentação por teclado
+    const kbSpeed = 380 * dt;
+    if(keys['ArrowLeft'] || keys['a'] || keys['A']){
+      ship.targetX -= kbSpeed;
+    }
+    if(keys['ArrowRight'] || keys['d'] || keys['D']){
+      ship.targetX += kbSpeed;
+    }
+    ship.targetX = Math.max(ship.w/2, Math.min(W - ship.w/2, ship.targetX));
+    ship.x += (ship.targetX - ship.x) * 0.22;
 
-      ship.targetX = Math.max(ship.w/2, Math.min(W - ship.w/2, ship.targetX));
-      ship.x += (ship.targetX - ship.x) * 0.2;
+    // Rastro da nave
+    ship.trail.push({ x: ship.x, y: ship.y + 12, life: 1 });
+    for(let i = ship.trail.length - 1; i >= 0; i--){
+      ship.trail[i].life -= dt * 4;
+      if(ship.trail[i].life <= 0) ship.trail.splice(i, 1);
+    }
 
-      // Planetas
-      planetSpawnTimer -= dt;
-      if(planetSpawnTimer <= 0){
+    // Spawn de asteroides
+    spawnTimer += dt;
+    const spawnInterval = Math.max(0.35, 1.2 - (speedMul - 1)*0.25);
+    if(spawnTimer > spawnInterval){
+      spawnTimer = 0;
+      spawnAsteroid();
+    }
+
+    // Spawn de planetas no fundo
+    planetSpawnTimer += dt;
+    if(planetSpawnTimer > 18){
+      planetSpawnTimer = 0;
+      if(Math.random() < 0.75){
         spawnPlanet();
-        planetSpawnTimer = 18 + Math.random()*12;
-      }
-      for(let i=planets.length-1; i>=0; i--){
-        const p = planets[i];
-        p.y += p.vy * speedMul;
-        if(p.y - p.r > H) planets.splice(i, 1);
-      }
-
-      // Asteroides
-      spawnTimer -= dt;
-      if(spawnTimer <= 0){
-        spawnAsteroid();
-        spawnTimer = Math.max(0.25, 1.2 / speedMul);
-      }
-
-      for(let i=asteroids.length-1; i>=0; i--){
-        const ast = asteroids[i];
-        ast.y += ast.vy;
-        ast.rot += ast.vrot;
-
-        // Raspando / Quase bateu
-        const dist = Math.hypot(ast.x - ship.x, ast.y - ship.y);
-        if(dist < ast.r + ship.w && dist > ast.r + 10){
-          unlockAchievement('por-pouco');
-        }
-
-        // Colisão
-        if(dist < ast.r + 10){
-          gameOver();
-          break;
-        }
-
-        if(ast.y - ast.r > H) asteroids.splice(i, 1);
-      }
-
-      // Laser
-      for(let i=laserBeams.length-1; i>=0; i--){
-        const beam = laserBeams[i];
-        beam.life -= dt;
-        if(beam.life <= 0) laserBeams.splice(i, 1);
-      }
-
-      // Partículas
-      for(let i=particles.length-1; i>=0; i--){
-        const pt = particles[i];
-        pt.x += pt.vx;
-        pt.y += pt.vy;
-        pt.life -= pt.decay;
-        if(pt.life <= 0) particles.splice(i, 1);
       }
     }
 
-    // Desenhar Planetas (Imagens)
-    planets.forEach(p => {
+    // Atualiza planetas
+    for(let i = planets.length - 1; i >= 0; i--){
+      const p = planets[i];
+      p.y += p.vy * (speedMul * 0.4);
+      if(p.y - p.r > H) planets.splice(i, 1);
+    }
+
+    // Atualiza estrelas
+    stars.forEach(st=>{
+      st.y += st.speed * speedMul * 2;
+      st.tw += dt * 2;
+      if(st.y > H){
+        st.y = -5;
+        st.x = Math.random()*W;
+      }
+    });
+
+    // Atualiza lasers
+    for(let i = laserBeams.length - 1; i >= 0; i--){
+      const lb = laserBeams[i];
+      lb.y -= lb.vy;
+      if(lb.y < -30){
+        laserBeams.splice(i, 1);
+        continue;
+      }
+
+      // Colisão laser x asteroide
+      for(let j = asteroids.length - 1; j >= 0; j--){
+        const ast = asteroids[j];
+        const dx = lb.x - ast.x;
+        const dy = lb.y - ast.y;
+        if(Math.sqrt(dx*dx + dy*dy) < ast.r + lb.w){
+          createExplosion(ast.x, ast.y, '#7ce8d8', 18);
+          asteroids.splice(j, 1);
+          laserBeams.splice(i, 1);
+          score += 50;
+
+          gameStats.laserKills = (gameStats.laserKills || 0) + 1;
+          if(gameStats.laserKills >= 10) unlockAchievement('atirador');
+          saveAchievementState();
+          break;
+        }
+      }
+    }
+
+    // Atualiza asteroides e colisão com a nave
+    for(let i = asteroids.length - 1; i >= 0; i--){
+      const ast = asteroids[i];
+      ast.y += ast.vy;
+      ast.rot += ast.vrot;
+
+      if(ast.y - ast.r > H){
+        asteroids.splice(i, 1);
+        continue;
+      }
+
+      // Verificação de colisão circular com a nave
+      const dx = ship.x - ast.x;
+      const dy = ship.y - ast.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      const minDist = ast.r + (ship.w * 0.38);
+
+      if(dist < minDist){
+        gameOver();
+        return;
+      } else if(dist < minDist + 12){
+        unlockAchievement('por-pouco');
+      }
+    }
+
+    // Partículas
+    for(let i = particles.length - 1; i >= 0; i--){
+      const p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life -= p.decay;
+      if(p.life <= 0) particles.splice(i, 1);
+    }
+  }
+
+  function render(){
+    ctx.clearRect(0, 0, W, H);
+
+    // 1. Estrelas
+    stars.forEach(st=>{
+      const alpha = 0.4 + Math.sin(st.tw)*0.3;
+      ctx.fillStyle = 'rgba(244,240,255,' + alpha + ')';
+      ctx.beginPath();
+      ctx.arc(st.x, st.y, st.r, 0, Math.PI*2);
+      ctx.fill();
+    });
+
+    // 2. Planetas de Fundo
+    planets.forEach(p=>{
       const img = images[p.type];
-      if(img && img.complete){
-        ctx.globalAlpha = 0.6;
-        ctx.drawImage(img, p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
+      if(img && img.complete && img.naturalWidth > 0){
+        ctx.globalAlpha = 0.35;
+        ctx.drawImage(img, p.x - p.r, p.y - p.r, p.r*2, p.r*2);
         ctx.globalAlpha = 1.0;
       }
     });
 
-    // Desenhar Asteroides (Imagens)
-    asteroids.forEach(ast => {
-      const img = images[ast.imgKey];
+    // 3. Asteroides
+    asteroids.forEach(ast=>{
       ctx.save();
       ctx.translate(ast.x, ast.y);
       ctx.rotate(ast.rot);
-      if(img && img.complete){
-        ctx.drawImage(img, -ast.r, -ast.r, ast.r * 2, ast.r * 2);
+
+      const img = images[ast.imgKey];
+      if(img && img.complete && img.naturalWidth > 0){
+        ctx.drawImage(img, -ast.r, -ast.r, ast.r*2, ast.r*2);
       } else {
-        ctx.fillStyle = '#888';
+        // Fallback gráfico se a imagem ainda não carregou
+        ctx.fillStyle = '#5c5470';
         ctx.beginPath();
         ctx.arc(0, 0, ast.r, 0, Math.PI*2);
         ctx.fill();
@@ -1153,102 +1264,82 @@
       ctx.restore();
     });
 
-    // Desenhar Laser
-    const skin = resolveSkinColors(getSelectedSkin());
-    laserBeams.forEach(beam => {
-      ctx.strokeStyle = skin.laser;
-      ctx.lineWidth = beam.w;
-      ctx.shadowColor = skin.laser;
-      ctx.shadowBlur = 12;
-      ctx.beginPath();
-      ctx.moveTo(beam.x, beam.y);
-      ctx.lineTo(beam.x, 0);
-      ctx.stroke();
+    // 4. Lasers
+    const currentSkin = resolveSkinColors(getSelectedSkin());
+    laserBeams.forEach(lb=>{
+      ctx.fillStyle = currentSkin.laser;
+      ctx.shadowColor = currentSkin.laser;
+      ctx.shadowBlur = 10;
+      ctx.fillRect(lb.x - lb.w/2, lb.y, lb.w, lb.h);
       ctx.shadowBlur = 0;
     });
 
-    // Desenhar Partículas
-    particles.forEach(pt => {
-      ctx.globalAlpha = pt.life;
-      ctx.fillStyle = pt.color;
+    // 5. Rastro da Nave
+    ship.trail.forEach(t=>{
+      ctx.fillStyle = currentSkin.thrust;
+      ctx.globalAlpha = t.life * 0.4;
       ctx.beginPath();
-      ctx.arc(pt.x, pt.y, pt.r, 0, Math.PI*2);
+      ctx.arc(t.x, t.y, (ship.w*0.2) * t.life, 0, Math.PI*2);
       ctx.fill();
     });
     ctx.globalAlpha = 1.0;
 
-    // Desenhar Nave
+    // 6. Nave do Jogador
     ctx.save();
     ctx.translate(ship.x, ship.y);
 
-    // Brilho do Propulsor
-    ctx.fillStyle = skin.thrust;
-    ctx.shadowColor = skin.thrust;
-    ctx.shadowBlur = 10;
+    ctx.shadowColor = currentSkin.glow;
+    ctx.shadowBlur = 12;
+
+    // Casco Externo
+    ctx.fillStyle = currentSkin.hull;
     ctx.beginPath();
-    ctx.moveTo(-6, 16);
-    ctx.lineTo(6, 16);
-    ctx.lineTo(0, 24 + Math.random()*6);
+    ctx.moveTo(0, -ship.h/2);
+    ctx.lineTo(ship.w/2, ship.h/2);
+    ctx.lineTo(0, ship.h/2 - 8);
+    ctx.lineTo(-ship.w/2, ship.h/2);
     ctx.closePath();
     ctx.fill();
+
+    // Detalhe Interno / Cabine
+    ctx.fillStyle = currentSkin.inner;
+    ctx.beginPath();
+    ctx.moveTo(0, -ship.h/4);
+    ctx.lineTo(ship.w/4, ship.h/3);
+    ctx.lineTo(0, ship.h/3 - 4);
+    ctx.lineTo(-ship.w/4, ship.h/3);
+    ctx.closePath();
+    ctx.fill();
+
     ctx.shadowBlur = 0;
-
-    // Corpo da Nave
-    ctx.fillStyle = skin.hull;
-    ctx.beginPath();
-    ctx.moveTo(0, -18);
-    ctx.lineTo(14, 16);
-    ctx.lineTo(0, 10);
-    ctx.lineTo(-14, 16);
-    ctx.closePath();
-    ctx.fill();
-
-    // Detalhe Interior
-    ctx.fillStyle = skin.inner;
-    ctx.beginPath();
-    ctx.moveTo(0, -6);
-    ctx.lineTo(7, 11);
-    ctx.lineTo(0, 7);
-    ctx.lineTo(-7, 11);
-    ctx.closePath();
-    ctx.fill();
-
     ctx.restore();
+
+    // 7. Partículas
+    particles.forEach(p=>{
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = p.life;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1.0;
   }
 
-  function gameOver(){
-    running = false;
-    pauseBtn.classList.add('hidden');
-    laserBtn.classList.add('hidden');
-
-    const skin = resolveSkinColors(getSelectedSkin());
-    createExplosion(ship.x, ship.y, skin.hull, 25);
-
-    gameStats.gamesPlayed++;
-    unlockAchievement('primeiro-voo');
-    if(gameStats.gamesPlayed >= 20) unlockAchievement('veterano');
-    if(laserCharges === 3) unlockAchievement('sem-perder-laser');
-
-    lastFinalScore = score;
-    if(score > best){
-      saveBest(score);
-    }
-
-    checkSkinUnlocks(best);
-    saveAchievementState();
-
-    const playerNumName = nameField.value.trim();
-    if(playerNumName){
-      saveScoreOnline(playerNumName, score);
-    }
-
-    msgText.innerHTML = '<div class="score-final">Pontuação: <b>'+score+'</b></div>Fim de jogo! Tente desviar com mais atenção da próxima vez.';
-    startBtn.textContent = 'Jogar de Novo';
-    shareBtn.classList.remove('hidden');
-    overlay.classList.remove('hidden');
+  function drawStaticBackground(){
+    ctx.clearRect(0, 0, W, H);
+    stars.forEach(st=>{
+      ctx.fillStyle = 'rgba(244,240,255,0.3)';
+      ctx.beginPath();
+      ctx.arc(st.x, st.y, st.r, 0, Math.PI*2);
+      ctx.fill();
+    });
   }
 
+  // Inicialização
+  initStars();
+  drawStaticBackground();
   requestAnimationFrame(loop);
+
 })();
 </script>
 </body>
