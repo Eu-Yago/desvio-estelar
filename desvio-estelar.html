@@ -928,11 +928,8 @@
       y: -size*1.4,
       r: size,
       type: type,
-      alpha: 0.7 + Math.random()*0.25
+      alpha: 0.65 + Math.random()*0.25
     };
-    if(type === 'saturno'){
-      planet.ringTilt = -0.32 - Math.random()*0.1;
-    }
     planets.push(planet);
   }
 
@@ -1233,7 +1230,7 @@
     ctx.restore();
   }
 
-  const PLANET_BASE_COLORS = {
+  const PLANET_COLORS = {
     terra:   { hi:'#6fc4f0', base:'#123d7a' },
     marte:   { hi:'#e08a52', base:'#8a3d1f' },
     jupiter: { hi:'#e8c48a', base:'#a8642e' },
@@ -1242,73 +1239,29 @@
     lua:     { hi:'#dcdcdc', base:'#83838f' }
   };
 
-  function drawSphereBase(p){
-    // usado como reserva enquanto a foto do planeta ainda está carregando
-    const c = PLANET_BASE_COLORS[p.type];
-    const grad = ctx.createRadialGradient(
-      p.x - p.r*0.35, p.y - p.r*0.35, p.r*0.15,
-      p.x, p.y, p.r
-    );
-    grad.addColorStop(0, c.hi);
-    grad.addColorStop(1, c.base);
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
-    ctx.fill();
-  }
-
   function drawPlanet(p){
     ctx.save();
     ctx.globalAlpha = p.alpha;
 
-    // Saturno: anéis atrás do planeta
-    if(p.type === 'saturno'){
-      ctx.save();
-      ctx.translate(p.x, p.y);
-      ctx.rotate(p.ringTilt);
-      ctx.scale(1, 0.3);
-      const ringBands = [
-        { r: p.r*1.75, w: p.r*0.16, color:'#8a6f45' },
-        { r: p.r*1.5,  w: p.r*0.2,  color:'#f2e3b8' },
-        { r: p.r*1.25, w: p.r*0.12, color:'#c9a05f' }
-      ];
-      ringBands.forEach(band=>{
-        ctx.beginPath();
-        ctx.arc(0, 0, band.r, 0, Math.PI*2);
-        ctx.strokeStyle = band.color;
-        ctx.lineWidth = band.w;
-        ctx.globalAlpha = p.alpha*0.75;
-        ctx.stroke();
-      });
-      ctx.restore();
-      ctx.globalAlpha = p.alpha;
-    }
-
     const img = PLANET_IMAGES[p.type];
     if(img && img.complete && img.naturalWidth > 0){
-      ctx.save();
+      const aspect = img.naturalWidth / img.naturalHeight;
+      const drawH = p.r * 2;
+      const drawW = drawH * aspect;
+      ctx.drawImage(img, p.x - drawW/2, p.y - drawH/2, drawW, drawH);
+    } else {
+      // reserva simples enquanto a imagem carrega
+      const c = PLANET_COLORS[p.type];
+      const grad = ctx.createRadialGradient(
+        p.x - p.r*0.35, p.y - p.r*0.35, p.r*0.15,
+        p.x, p.y, p.r
+      );
+      grad.addColorStop(0, c.hi);
+      grad.addColorStop(1, c.base);
+      ctx.fillStyle = grad;
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
-      ctx.clip();
-      ctx.drawImage(img, p.x - p.r, p.y - p.r, p.r*2, p.r*2);
-      ctx.restore();
-    } else {
-      drawSphereBase(p);
-    }
-
-    // Saturno: aro frontal por cima do planeta
-    if(p.type === 'saturno'){
-      ctx.save();
-      ctx.translate(p.x, p.y);
-      ctx.rotate(p.ringTilt);
-      ctx.scale(1, 0.3);
-      ctx.beginPath();
-      ctx.arc(0, 0, p.r*1.5, Math.PI*0.08, Math.PI*0.92);
-      ctx.strokeStyle = '#f2e3b8';
-      ctx.lineWidth = p.r*0.18;
-      ctx.globalAlpha = p.alpha*0.9;
-      ctx.stroke();
-      ctx.restore();
+      ctx.fill();
     }
 
     ctx.restore();
