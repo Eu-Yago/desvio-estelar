@@ -150,6 +150,64 @@
     z-index: 12;
   }
   #donateCornerBtn:active{ background: rgba(244,240,255,0.15); }
+
+  #redeemOverlay{
+    position:absolute; inset:0;
+    flex-direction:column; align-items:center; justify-content:center;
+    text-align:center;
+    background: radial-gradient(ellipse at 50% 30%, rgba(45,27,78,0.88) 0%, rgba(5,5,16,0.98) 70%);
+    z-index: 13;
+    padding: 30px;
+    display: flex;
+  }
+  #redeemOverlay.hidden{ display:none; }
+  #redeemCodeField{
+    background: rgba(244,240,255,0.06);
+    border: 1px solid var(--comet);
+    color: var(--star);
+    padding: 12px 16px;
+    font-family: inherit;
+    font-size: 14px;
+    letter-spacing: 1px;
+    border-radius: 2px;
+    text-align:center;
+    width: 220px;
+    margin-bottom: 10px;
+    outline: none;
+  }
+  #redeemCodeField::placeholder{ color: rgba(244,240,255,0.35); }
+  .redeem-error{ color: var(--danger); }
+  .redeem-success{ color: var(--comet); }
+
+  #customizeOverlay{
+    position:absolute; inset:0;
+    flex-direction:column; align-items:center; justify-content:center;
+    text-align:center;
+    background: radial-gradient(ellipse at 50% 30%, rgba(45,27,78,0.88) 0%, rgba(5,5,16,0.98) 70%);
+    z-index: 13;
+    padding: 30px;
+    display: flex;
+  }
+  #customizeOverlay.hidden{ display:none; }
+  #customizePreview{ width:60px; height:66px; margin: 6px 0 18px 0; }
+  #customizePreview svg{ width:100%; height:100%; }
+  .customize-row{
+    display:flex; align-items:center; justify-content:space-between;
+    width: 220px;
+    margin-bottom: 12px;
+    color: var(--star);
+    font-size: 12px;
+    letter-spacing: 0.5px;
+  }
+  .customize-row input[type="color"]{
+    width: 44px; height: 30px;
+    border: 1px solid rgba(244,240,255,0.35);
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+    padding: 0;
+  }
+
   #pixQrImage{
     background: #fff;
     padding: 8px;
@@ -456,7 +514,38 @@
     <div id="pixKeyBox">b2c4f491-fb60-48b2-a023-5cb26be21fed</div>
     <button id="copyPixBtn" class="ghost-btn">Copiar chave PIX</button>
     <div class="msg" style="font-size:11px; opacity:0.6; margin-top:14px; margin-bottom:0;">Ou: Pix → Pix Copia e Cola (ou transferência) → cole essa chave (telefone)</div>
+    <div class="msg" style="font-size:11px; opacity:0.75; margin-top:14px; margin-bottom:0;">Já pagou R$ 4,99 pela nave personalizável? <span id="openRedeemLink" style="color:var(--comet); text-decoration:underline; cursor:pointer;">Resgatar código</span></div>
     <button id="closeDonateBtn" class="ghost-btn" style="margin-top:16px;">Fechar</button>
+  </div>
+
+  <div id="redeemOverlay" class="hidden">
+    <div class="title" style="font-size:22px;">RESGATAR CÓDIGO</div>
+    <div class="subtitle">nave personalizável</div>
+    <div class="msg">Digite o código único que você recebeu depois de fazer o PIX de R$ 4,99.</div>
+    <input type="text" id="redeemCodeField" placeholder="Seu código" maxlength="40" autocapitalize="off" autocorrect="off">
+    <div id="redeemStatus" class="msg" style="min-height:16px; font-size:12px; margin-bottom:6px;"></div>
+    <div class="row-btns">
+      <button id="submitRedeemBtn" class="ghost-btn">Resgatar</button>
+      <button id="closeRedeemBtn" class="ghost-btn">Fechar</button>
+    </div>
+  </div>
+
+  <div id="customizeOverlay" class="hidden">
+    <div class="title" style="font-size:22px;">PERSONALIZE</div>
+    <div class="subtitle">sua nave, suas cores</div>
+    <div id="customizePreview"></div>
+    <div class="customize-row">
+      <label for="customHullInput">Cor do casco</label>
+      <input type="color" id="customHullInput" value="#ffffff">
+    </div>
+    <div class="customize-row">
+      <label for="customInnerInput">Cor de destaque</label>
+      <input type="color" id="customInnerInput" value="#7ce8d8">
+    </div>
+    <div class="row-btns" style="margin-top:16px;">
+      <button id="saveCustomBtn" class="ghost-btn">Salvar</button>
+      <button id="closeCustomizeBtn" class="ghost-btn">Fechar</button>
+    </div>
   </div>
 
   <div id="rankingOverlay" class="hidden">
@@ -682,6 +771,124 @@
   pixKeyBox.addEventListener('click', copyPixKey);
   // ======= FIM PIX =======
 
+  // ======= RESGATAR CÓDIGO (nave personalizável) =======
+  const redeemOverlay = document.getElementById('redeemOverlay');
+  const redeemCodeField = document.getElementById('redeemCodeField');
+  const redeemStatus = document.getElementById('redeemStatus');
+  const submitRedeemBtn = document.getElementById('submitRedeemBtn');
+  const closeRedeemBtn = document.getElementById('closeRedeemBtn');
+  const openRedeemLink = document.getElementById('openRedeemLink');
+  redeemCodeField.addEventListener('keydown', (e)=>{ e.stopPropagation(); });
+
+  function openRedeemOverlay(){
+    redeemStatus.textContent = '';
+    redeemStatus.className = 'msg';
+    redeemCodeField.value = '';
+    redeemOverlay.classList.remove('hidden');
+  }
+  openRedeemLink.addEventListener('click', ()=>{
+    donateOverlay.classList.add('hidden');
+    openRedeemOverlay();
+  });
+  closeRedeemBtn.addEventListener('click', ()=>{
+    redeemOverlay.classList.add('hidden');
+  });
+
+  async function redeemCode(){
+    const code = redeemCodeField.value.trim();
+    if(!code){
+      redeemStatus.textContent = 'Digite um código.';
+      redeemStatus.className = 'msg redeem-error';
+      return;
+    }
+    if(!firebaseReady){
+      redeemStatus.textContent = 'Sem conexão no momento. Tente novamente em instantes.';
+      redeemStatus.className = 'msg redeem-error';
+      return;
+    }
+    submitRedeemBtn.disabled = true;
+    redeemStatus.textContent = 'Verificando...';
+    redeemStatus.className = 'msg';
+    try{
+      const ref = db.collection('unlockCodes').doc(code);
+      const doc = await ref.get();
+      if(!doc.exists){
+        redeemStatus.textContent = 'Código inválido.';
+        redeemStatus.className = 'msg redeem-error';
+      } else if(doc.data().used){
+        redeemStatus.textContent = 'Esse código já foi utilizado.';
+        redeemStatus.className = 'msg redeem-error';
+      } else {
+        await ref.update({ used: true, usedAt: Date.now() });
+        if(unlockSpecialSkin('personalizada')){
+          renderSkinsGrid();
+        }
+        redeemStatus.textContent = 'Código resgatado! Sua nave foi liberada 🎉';
+        redeemStatus.className = 'msg redeem-success';
+        setTimeout(()=>{
+          redeemOverlay.classList.add('hidden');
+          selectedSkinId = 'personalizada';
+          saveSkinState();
+          openCustomizeOverlay();
+        }, 1400);
+      }
+    } catch(e){
+      console.warn('Erro ao resgatar código:', e);
+      redeemStatus.textContent = 'Erro ao verificar o código. Tente de novo.';
+      redeemStatus.className = 'msg redeem-error';
+    }
+    submitRedeemBtn.disabled = false;
+  }
+
+  submitRedeemBtn.addEventListener('click', redeemCode);
+  // ======= FIM RESGATAR CÓDIGO =======
+
+  // ======= PERSONALIZAR NAVE =======
+  const customizeOverlay = document.getElementById('customizeOverlay');
+  const customizePreview = document.getElementById('customizePreview');
+  const customHullInput = document.getElementById('customHullInput');
+  const customInnerInput = document.getElementById('customInnerInput');
+  const saveCustomBtn = document.getElementById('saveCustomBtn');
+  const closeCustomizeBtn = document.getElementById('closeCustomizeBtn');
+
+  function updateCustomizePreview(){
+    customizePreview.innerHTML = shipIconSvg({ custom:true });
+  }
+
+  function openCustomizeOverlay(){
+    customHullInput.value = customColors.hull;
+    customInnerInput.value = customColors.inner;
+    updateCustomizePreview();
+    customizeOverlay.classList.remove('hidden');
+  }
+
+  customHullInput.addEventListener('input', ()=>{
+    customColors.hull = customHullInput.value;
+    updateCustomizePreview();
+  });
+  customInnerInput.addEventListener('input', ()=>{
+    customColors.inner = customInnerInput.value;
+    updateCustomizePreview();
+  });
+
+  saveCustomBtn.addEventListener('click', ()=>{
+    saveCustomColors();
+    customizeOverlay.classList.add('hidden');
+    if(selectedSkinId !== 'personalizada'){
+      selectedSkinId = 'personalizada';
+      saveSkinState();
+    }
+  });
+  closeCustomizeBtn.addEventListener('click', ()=>{
+    // descarta alterações não salvas, volta pro que já tava gravado
+    try{
+      const stored = JSON.parse(window.localStorage.getItem('desvioEstelar_customColors') || 'null');
+      if(stored) customColors = stored;
+    }catch(e){}
+    customizeOverlay.classList.add('hidden');
+  });
+  // ======= FIM PERSONALIZAR =======
+
   // ======= COMPARTILHAR PONTUAÇÃO =======
   const shareBtn = document.getElementById('shareBtn');
   let lastFinalScore = 0;
@@ -829,22 +1036,39 @@
     { id:'esmeralda', name:'Esmeralda', hull:'#c2ffd9', inner:'#3dffa0', glow:'rgba(61,255,160,0.7)',  thrust:'#3dffa0', laser:'#ff5d73', unlockType:'score', unlock:20000 },
     { id:'fundador',  name:'Fundador',  hull:'#1c1c26', inner:'#ffd54a', glow:'rgba(255,213,74,0.9)',  thrust:'#ffd54a', laser:'#ffd54a', unlockType:'name' },
     { id:'lendaria',  name:'Lendária',  hull:'#ffffff', inner:'#ff2fe0', glow:'rgba(255,255,255,0.85)', thrust:'#ff2fe0', laser:'#ff2fe0', unlockType:'achievements', dynamic:true },
+    { id:'personalizada', name:'Crie sua Nave', hull:'#ffffff', inner:'#7ce8d8', glow:'rgba(255,255,255,0.7)', thrust:'#7ce8d8', laser:'#7ce8d8', unlockType:'code', custom:true },
   ];
 
   let unlockedSkins = ['estelar'];
   let selectedSkinId = 'estelar';
+  let customColors = { hull:'#ffffff', inner:'#7ce8d8' };
   try{
     const storedUnlocked = JSON.parse(window.localStorage.getItem('desvioEstelar_unlocked') || '["estelar"]');
     if(Array.isArray(storedUnlocked)) unlockedSkins = storedUnlocked;
     const storedSelected = window.localStorage.getItem('desvioEstelar_skin');
     if(storedSelected) selectedSkinId = storedSelected;
+    const storedCustom = JSON.parse(window.localStorage.getItem('desvioEstelar_customColors') || 'null');
+    if(storedCustom && storedCustom.hull && storedCustom.inner) customColors = storedCustom;
   }catch(e){}
+
+  function saveCustomColors(){
+    try{ window.localStorage.setItem('desvioEstelar_customColors', JSON.stringify(customColors)); }catch(e){}
+  }
 
   function getSelectedSkin(){
     return SKINS.find(s=>s.id===selectedSkinId) || SKINS[0];
   }
 
   function resolveSkinColors(skin){
+    if(skin.custom){
+      return {
+        hull: customColors.hull,
+        inner: customColors.inner,
+        glow: customColors.inner + 'b3',
+        thrust: customColors.inner,
+        laser: customColors.inner
+      };
+    }
     if(skin.dynamic){
       const hue = (Date.now()/12) % 360;
       return {
@@ -912,13 +1136,15 @@
   }
 
   function shipIconSvg(skin){
-    return '<svg viewBox="0 0 40 44"><polygon points="20,2 33,38 20,29 7,38" fill="'+skin.hull+'"/><polygon points="20,14 26,32 20,28 14,32" fill="'+skin.inner+'"/></svg>';
+    const c = skin.custom ? { hull: customColors.hull, inner: customColors.inner } : skin;
+    return '<svg viewBox="0 0 40 44"><polygon points="20,2 33,38 20,29 7,38" fill="'+c.hull+'"/><polygon points="20,14 26,32 20,28 14,32" fill="'+c.inner+'"/></svg>';
   }
 
   function skinLockLabel(skin){
     if(skin.unlockType === 'score') return skin.unlock + ' pts';
     if(skin.unlockType === 'name') return 'Segredo';
     if(skin.unlockType === 'achievements') return 'Todas conquistas';
+    if(skin.unlockType === 'code') return 'R$ 4,99';
     return '???';
   }
 
@@ -928,14 +1154,25 @@
       const unlocked = unlockedSkins.includes(skin.id);
       const card = document.createElement('div');
       card.className = 'skin-card' + (unlocked ? '' : ' locked') + (skin.id===selectedSkinId ? ' selected' : '');
-      card.innerHTML = shipIconSvg(skin) +
-        '<div class="skin-name">'+skin.name+'</div>' +
-        (unlocked ? (skin.id===selectedSkinId ? '<div class="skin-check">✓</div>' : '') : '<div class="skin-lock">'+skinLockLabel(skin)+'</div>');
+      let extra = '';
+      if(unlocked && skin.id===selectedSkinId) extra = '<div class="skin-check">✓</div>';
+      if(!unlocked) extra = '<div class="skin-lock">'+skinLockLabel(skin)+'</div>';
+      card.innerHTML = shipIconSvg(skin) + '<div class="skin-name">'+skin.name+'</div>' + extra;
+
       if(unlocked){
         card.addEventListener('click', ()=>{
+          if(skin.custom && skin.id===selectedSkinId){
+            openCustomizeOverlay();
+            return;
+          }
           selectedSkinId = skin.id;
           saveSkinState();
           renderSkinsGrid();
+        });
+      } else if(skin.unlockType === 'code'){
+        card.addEventListener('click', ()=>{
+          skinsOverlay.classList.add('hidden');
+          openRedeemOverlay();
         });
       }
       skinsGrid.appendChild(card);
