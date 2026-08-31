@@ -151,6 +151,24 @@
   }
   #donateCornerBtn:active{ background: rgba(244,240,255,0.15); }
 
+  #redeemCornerBtn{
+    position:absolute;
+    top: 16px;
+    left: 16px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 1px solid rgba(244,240,255,0.35);
+    background: rgba(10,10,22,0.4);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size: 17px;
+    cursor: pointer;
+    z-index: 12;
+  }
+  #redeemCornerBtn:active{ background: rgba(244,240,255,0.15); }
+
   #redeemOverlay{
     position:absolute; inset:0;
     flex-direction:column; align-items:center; justify-content:center;
@@ -491,6 +509,7 @@
 
   <div id="overlay">
     <button id="donateCornerBtn" aria-label="Apoie o projeto">💜</button>
+    <button id="redeemCornerBtn" aria-label="Resgatar código">🎫</button>
     <div class="title">DESVIO ESTELAR</div>
     <div class="subtitle">um jogo pra passar o tempo</div>
     <div class="msg" id="msgText">Guie sua nave pelo campo de asteroides.<br>Toque e arraste, ou use as setas.<br>Quanto mais tempo vivo, mais rápido fica.</div>
@@ -514,7 +533,6 @@
     <div id="pixKeyBox">b2c4f491-fb60-48b2-a023-5cb26be21fed</div>
     <button id="copyPixBtn" class="ghost-btn">Copiar chave PIX</button>
     <div class="msg" style="font-size:11px; opacity:0.6; margin-top:14px; margin-bottom:0;">Ou: Pix → Pix Copia e Cola (ou transferência) → cole essa chave (telefone)</div>
-    <div class="msg" style="font-size:11px; opacity:0.75; margin-top:14px; margin-bottom:0;">Já pagou R$ 4,99 pela nave personalizável? <span id="openRedeemLink" style="color:var(--comet); text-decoration:underline; cursor:pointer;">Resgatar código</span></div>
     <button id="closeDonateBtn" class="ghost-btn" style="margin-top:16px;">Fechar</button>
   </div>
 
@@ -777,7 +795,7 @@
   const redeemStatus = document.getElementById('redeemStatus');
   const submitRedeemBtn = document.getElementById('submitRedeemBtn');
   const closeRedeemBtn = document.getElementById('closeRedeemBtn');
-  const openRedeemLink = document.getElementById('openRedeemLink');
+  const redeemCornerBtn = document.getElementById('redeemCornerBtn');
   redeemCodeField.addEventListener('keydown', (e)=>{ e.stopPropagation(); });
 
   function openRedeemOverlay(){
@@ -786,10 +804,7 @@
     redeemCodeField.value = '';
     redeemOverlay.classList.remove('hidden');
   }
-  openRedeemLink.addEventListener('click', ()=>{
-    donateOverlay.classList.add('hidden');
-    openRedeemOverlay();
-  });
+  redeemCornerBtn.addEventListener('click', openRedeemOverlay);
   closeRedeemBtn.addEventListener('click', ()=>{
     redeemOverlay.classList.add('hidden');
   });
