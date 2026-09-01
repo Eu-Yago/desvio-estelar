@@ -203,24 +203,49 @@
     text-align:center;
     background: radial-gradient(ellipse at 50% 30%, rgba(45,27,78,0.88) 0%, rgba(5,5,16,0.98) 70%);
     z-index: 13;
-    padding: 30px;
+    padding: 16px;
     display: flex;
   }
   #customizeOverlay.hidden{ display:none; }
-  #customizePreview{ width:60px; height:66px; margin: 6px 0 18px 0; }
-  #customizePreview svg{ width:100%; height:100%; }
-  .customize-row{
-    display:flex; align-items:center; justify-content:space-between;
-    width: 220px;
-    margin-bottom: 12px;
-    color: var(--star);
-    font-size: 12px;
-    letter-spacing: 0.5px;
-  }
-  .customize-row input[type="color"]{
-    width: 44px; height: 30px;
+  #pixelEditorCanvas{
     border: 1px solid rgba(244,240,255,0.35);
     border-radius: 4px;
+    background: rgba(244,240,255,0.03);
+    touch-action: none;
+    margin: 10px 0;
+    cursor: crosshair;
+  }
+  .palette-row{
+    display:flex; align-items:center; justify-content:center;
+    gap: 6px;
+    flex-wrap: wrap;
+    max-width: 260px;
+    margin-bottom: 8px;
+  }
+  .swatch{
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    border: 2px solid rgba(244,240,255,0.25);
+    cursor: pointer;
+    padding: 0;
+  }
+  .swatch.active{ border-color: var(--comet); }
+  .tool-btn{
+    background: transparent;
+    border: 1px solid rgba(244,240,255,0.35);
+    color: var(--star);
+    padding: 6px 12px;
+    font-family: inherit;
+    font-size: 10.5px;
+    letter-spacing: 0.5px;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .tool-btn.active{ border-color: var(--danger); color: var(--danger); }
+  .palette-row input[type="color"]{
+    width: 30px; height: 30px;
+    border: 1px solid rgba(244,240,255,0.35);
+    border-radius: 50%;
     background: none;
     cursor: pointer;
     padding: 0;
@@ -549,18 +574,15 @@
   </div>
 
   <div id="customizeOverlay" class="hidden">
-    <div class="title" style="font-size:22px;">PERSONALIZE</div>
-    <div class="subtitle">sua nave, suas cores</div>
-    <div id="customizePreview"></div>
-    <div class="customize-row">
-      <label for="customHullInput">Cor do casco</label>
-      <input type="color" id="customHullInput" value="#ffffff">
+    <div class="title" style="font-size:20px;">DESENHE SUA NAVE</div>
+    <canvas id="pixelEditorCanvas" width="204" height="272"></canvas>
+    <div class="palette-row" id="paletteRow"></div>
+    <div class="palette-row">
+      <input type="color" id="customColorPicker" value="#7ce8d8">
+      <button id="eraserBtn" class="tool-btn">Borracha</button>
+      <button id="clearCanvasBtn" class="tool-btn">Limpar</button>
     </div>
-    <div class="customize-row">
-      <label for="customInnerInput">Cor de destaque</label>
-      <input type="color" id="customInnerInput" value="#7ce8d8">
-    </div>
-    <div class="row-btns" style="margin-top:16px;">
+    <div class="row-btns" style="margin-top:12px;">
       <button id="saveCustomBtn" class="ghost-btn">Salvar</button>
       <button id="closeCustomizeBtn" class="ghost-btn">Fechar</button>
     </div>
@@ -858,35 +880,147 @@
   submitRedeemBtn.addEventListener('click', redeemCode);
   // ======= FIM RESGATAR CÓDIGO =======
 
-  // ======= PERSONALIZAR NAVE =======
+  // ======= PERSONALIZAR NAVE (editor de pixel art) =======
   const customizeOverlay = document.getElementById('customizeOverlay');
-  const customizePreview = document.getElementById('customizePreview');
-  const customHullInput = document.getElementById('customHullInput');
-  const customInnerInput = document.getElementById('customInnerInput');
   const saveCustomBtn = document.getElementById('saveCustomBtn');
   const closeCustomizeBtn = document.getElementById('closeCustomizeBtn');
+  const pixelEditorCanvas = document.getElementById('pixelEditorCanvas');
+  const pctx = pixelEditorCanvas.getContext('2d');
+  const paletteRow = document.getElementById('paletteRow');
+  const customColorPicker = document.getElementById('customColorPicker');
+  const eraserBtn = document.getElementById('eraserBtn');
+  const clearCanvasBtn = document.getElementById('clearCanvasBtn');
 
-  function updateCustomizePreview(){
-    customizePreview.innerHTML = shipIconSvg({ custom:true });
+  const PIXEL_COLS = 12;
+  const PIXEL_ROWS = 16;
+  const PIXEL_SIZE = pixelEditorCanvas.width / PIXEL_COLS; // 17px por quadradinho
+
+  const PALETTE = ['#f4f0ff','#7ce8d8','#ff5d73','#f5c542','#ff6fd8','#3dffa0','#5ab0e0','#1c1c26'];
+  let currentColor = '#7ce8d8';
+  let eraserOn = false;
+
+  function pointInPoly(x, y, poly){
+    let inside = false;
+    for(let i=0, j=poly.length-1; i<poly.length; j=i++){
+      const xi=poly[i][0], yi=poly[i][1], xj=poly[j][0], yj=poly[j][1];
+      const intersect = ((yi>y)!==(yj>y)) && (x < (xj-xi)*(y-yi)/(yj-yi)+xi);
+      if(intersect) inside = !inside;
+    }
+    return inside;
   }
 
+  function defaultShipGrid(){
+    // gera um formato de nave padrão (mesmo contorno do jogo) pra pessoa editar em cima
+    const hull = [[0,-20],[13,18],[0,11],[-13,18]];
+    const inner = [[0,-8],[6,6],[0,2],[-6,6]];
+    const grid = new Array(PIXEL_ROWS * PIXEL_COLS).fill(null);
+    for(let r=0; r<PIXEL_ROWS; r++){
+      for(let c=0; c<PIXEL_COLS; c++){
+        // mapeia célula da grade pro espaço de coordenadas da nave (-13..13, -20..18)
+        const sx = (c + 0.5) / PIXEL_COLS * 26 - 13;
+        const sy = (r + 0.5) / PIXEL_ROWS * 38 - 20;
+        if(pointInPoly(sx, sy, inner)) grid[r*PIXEL_COLS+c] = '#7ce8d8';
+        else if(pointInPoly(sx, sy, hull)) grid[r*PIXEL_COLS+c] = '#f4f0ff';
+      }
+    }
+    return grid;
+  }
+
+  let pixelGrid = null;
+  try{
+    const stored = JSON.parse(window.localStorage.getItem('desvioEstelar_customSprite') || 'null');
+    if(Array.isArray(stored) && stored.length === PIXEL_ROWS*PIXEL_COLS) pixelGrid = stored;
+  }catch(e){}
+
+  function dominantColor(grid){
+    const counts = {};
+    grid.forEach(c=>{ if(c){ counts[c] = (counts[c]||0)+1; } });
+    let best = '#7ce8d8', bestCount = 0;
+    for(const c in counts){ if(counts[c] > bestCount){ best = c; bestCount = counts[c]; } }
+    return best;
+  }
+
+  function renderPaletteSwatches(){
+    paletteRow.innerHTML = '';
+    PALETTE.forEach(color=>{
+      const sw = document.createElement('button');
+      sw.className = 'swatch' + (color===currentColor && !eraserOn ? ' active' : '');
+      sw.style.background = color;
+      sw.addEventListener('click', ()=>{
+        currentColor = color;
+        eraserOn = false;
+        customColorPicker.value = color;
+        eraserBtn.classList.remove('active');
+        renderPaletteSwatches();
+      });
+      paletteRow.appendChild(sw);
+    });
+  }
+
+  function drawPixelEditor(){
+    pctx.clearRect(0, 0, pixelEditorCanvas.width, pixelEditorCanvas.height);
+    for(let r=0; r<PIXEL_ROWS; r++){
+      for(let c=0; c<PIXEL_COLS; c++){
+        const color = pixelGrid[r*PIXEL_COLS+c];
+        pctx.fillStyle = color || 'rgba(244,240,255,0.04)';
+        pctx.fillRect(c*PIXEL_SIZE, r*PIXEL_SIZE, PIXEL_SIZE-1, PIXEL_SIZE-1);
+      }
+    }
+  }
+
+  function paintAt(clientX, clientY){
+    const rect = pixelEditorCanvas.getBoundingClientRect();
+    const scaleX = pixelEditorCanvas.width / rect.width;
+    const scaleY = pixelEditorCanvas.height / rect.height;
+    const x = (clientX - rect.left) * scaleX;
+    const y = (clientY - rect.top) * scaleY;
+    const c = Math.floor(x / PIXEL_SIZE);
+    const r = Math.floor(y / PIXEL_SIZE);
+    if(c<0 || c>=PIXEL_COLS || r<0 || r>=PIXEL_ROWS) return;
+    pixelGrid[r*PIXEL_COLS+c] = eraserOn ? null : currentColor;
+    drawPixelEditor();
+  }
+
+  let painting = false;
+  pixelEditorCanvas.addEventListener('pointerdown', (e)=>{
+    e.stopPropagation();
+    painting = true;
+    paintAt(e.clientX, e.clientY);
+  });
+  pixelEditorCanvas.addEventListener('pointermove', (e)=>{
+    e.stopPropagation();
+    if(painting) paintAt(e.clientX, e.clientY);
+  });
+  window.addEventListener('pointerup', ()=>{ painting = false; });
+
+  customColorPicker.addEventListener('input', ()=>{
+    currentColor = customColorPicker.value;
+    eraserOn = false;
+    eraserBtn.classList.remove('active');
+    renderPaletteSwatches();
+  });
+
+  eraserBtn.addEventListener('click', ()=>{
+    eraserOn = !eraserOn;
+    eraserBtn.classList.toggle('active', eraserOn);
+  });
+
+  clearCanvasBtn.addEventListener('click', ()=>{
+    pixelGrid = new Array(PIXEL_ROWS * PIXEL_COLS).fill(null);
+    drawPixelEditor();
+  });
+
   function openCustomizeOverlay(){
-    customHullInput.value = customColors.hull;
-    customInnerInput.value = customColors.inner;
-    updateCustomizePreview();
+    if(!pixelGrid) pixelGrid = defaultShipGrid();
+    renderPaletteSwatches();
+    drawPixelEditor();
     customizeOverlay.classList.remove('hidden');
   }
 
-  customHullInput.addEventListener('input', ()=>{
-    customColors.hull = customHullInput.value;
-    updateCustomizePreview();
-  });
-  customInnerInput.addEventListener('input', ()=>{
-    customColors.inner = customInnerInput.value;
-    updateCustomizePreview();
-  });
-
   saveCustomBtn.addEventListener('click', ()=>{
+    try{ window.localStorage.setItem('desvioEstelar_customSprite', JSON.stringify(pixelGrid)); }catch(e){}
+    const accent = dominantColor(pixelGrid);
+    customColors = { hull: accent, inner: accent };
     saveCustomColors();
     customizeOverlay.classList.add('hidden');
     if(selectedSkinId !== 'personalizada'){
@@ -895,11 +1029,10 @@
     }
   });
   closeCustomizeBtn.addEventListener('click', ()=>{
-    // descarta alterações não salvas, volta pro que já tava gravado
     try{
-      const stored = JSON.parse(window.localStorage.getItem('desvioEstelar_customColors') || 'null');
-      if(stored) customColors = stored;
-    }catch(e){}
+      const stored = JSON.parse(window.localStorage.getItem('desvioEstelar_customSprite') || 'null');
+      pixelGrid = (Array.isArray(stored) && stored.length === PIXEL_ROWS*PIXEL_COLS) ? stored : null;
+    }catch(e){ pixelGrid = null; }
     customizeOverlay.classList.add('hidden');
   });
   // ======= FIM PERSONALIZAR =======
@@ -1552,6 +1685,29 @@
     ctx.save();
     ctx.translate(ship.x, ship.y);
     const skin = resolveSkinColors(getSelectedSkin());
+
+    if(skin.custom && pixelGrid && pixelGrid.some(c=>c)){
+      // desenha o pixel art customizado, escalado pro tamanho da nave
+      const shipW = 26, shipH = 38;
+      const cellW = shipW / PIXEL_COLS;
+      const cellH = shipH / PIXEL_ROWS;
+      ctx.shadowColor = skin.glow;
+      ctx.shadowBlur = 10;
+      for(let r=0; r<PIXEL_ROWS; r++){
+        for(let c=0; c<PIXEL_COLS; c++){
+          const color = pixelGrid[r*PIXEL_COLS+c];
+          if(!color) continue;
+          const px = (c * cellW) - shipW/2;
+          const py = (r * cellH) - 20;
+          ctx.fillStyle = color;
+          ctx.fillRect(px, py, cellW+0.5, cellH+0.5);
+        }
+      }
+      ctx.shadowBlur = 0;
+      ctx.restore();
+      return;
+    }
+
     // glow
     ctx.shadowColor = skin.glow;
     ctx.shadowBlur = 14;
