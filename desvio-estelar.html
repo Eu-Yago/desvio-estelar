@@ -581,6 +581,7 @@
       <input type="color" id="customColorPicker" value="#7ce8d8">
       <button id="eraserBtn" class="tool-btn">Borracha</button>
       <button id="clearCanvasBtn" class="tool-btn">Limpar</button>
+      <button id="resetTemplateBtn" class="tool-btn">Restaurar molde</button>
     </div>
     <div class="row-btns" style="margin-top:12px;">
       <button id="saveCustomBtn" class="ghost-btn">Salvar</button>
@@ -890,6 +891,7 @@
   const customColorPicker = document.getElementById('customColorPicker');
   const eraserBtn = document.getElementById('eraserBtn');
   const clearCanvasBtn = document.getElementById('clearCanvasBtn');
+  const resetTemplateBtn = document.getElementById('resetTemplateBtn');
 
   const PIXEL_COLS = 12;
   const PIXEL_ROWS = 16;
@@ -926,6 +928,8 @@
     return grid;
   }
 
+  const TEMPLATE_GRID = defaultShipGrid(); // guia fixo, usado pro contorno de fundo e pro botão "Restaurar molde"
+
   let pixelGrid = null;
   try{
     const stored = JSON.parse(window.localStorage.getItem('desvioEstelar_customSprite') || 'null');
@@ -961,8 +965,16 @@
     pctx.clearRect(0, 0, pixelEditorCanvas.width, pixelEditorCanvas.height);
     for(let r=0; r<PIXEL_ROWS; r++){
       for(let c=0; c<PIXEL_COLS; c++){
-        const color = pixelGrid[r*PIXEL_COLS+c];
-        pctx.fillStyle = color || 'rgba(244,240,255,0.04)';
+        const idx = r*PIXEL_COLS+c;
+        const color = pixelGrid[idx];
+        if(color){
+          pctx.fillStyle = color;
+        } else if(TEMPLATE_GRID[idx]){
+          // célula vazia, mas faz parte do contorno-guia da nave: mostra bem sutil
+          pctx.fillStyle = 'rgba(244,240,255,0.14)';
+        } else {
+          pctx.fillStyle = 'rgba(244,240,255,0.04)';
+        }
         pctx.fillRect(c*PIXEL_SIZE, r*PIXEL_SIZE, PIXEL_SIZE-1, PIXEL_SIZE-1);
       }
     }
@@ -1007,6 +1019,11 @@
 
   clearCanvasBtn.addEventListener('click', ()=>{
     pixelGrid = new Array(PIXEL_ROWS * PIXEL_COLS).fill(null);
+    drawPixelEditor();
+  });
+
+  resetTemplateBtn.addEventListener('click', ()=>{
+    pixelGrid = TEMPLATE_GRID.slice(); // cópia, pra não editar o molde original
     drawPixelEditor();
   });
 
