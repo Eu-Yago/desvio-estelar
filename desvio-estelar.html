@@ -1210,6 +1210,7 @@
   function resolveSkinColors(skin){
     if(skin.custom){
       return {
+        custom: true,
         hull: customColors.hull,
         inner: customColors.inner,
         glow: customColors.inner + 'b3',
