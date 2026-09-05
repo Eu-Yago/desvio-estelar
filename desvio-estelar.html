@@ -11,6 +11,7 @@
 <!-- Firebase (para ranking online) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <style>
   :root{
     --void: #0a0a16;
@@ -78,6 +79,32 @@
     transition: opacity 0.3s ease;
   }
   #overlay.hidden{ opacity:0; pointer-events:none; }
+
+  #authOverlay{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center;
+    background: radial-gradient(ellipse at 50% 30%, rgba(45,27,78,0.92) 0%, rgba(5,5,16,0.99) 70%);
+    z-index: 15;
+    padding: 30px;
+  }
+  #authOverlay.hidden{ display:none; }
+  #authUsername, #authPassword{
+    background: rgba(244,240,255,0.06);
+    border: 1px solid var(--comet);
+    color: var(--star);
+    padding: 12px 16px;
+    font-family: inherit;
+    font-size: 14px;
+    letter-spacing: 1px;
+    border-radius: 2px;
+    text-align:center;
+    width: 220px;
+    margin-bottom: 10px;
+    outline: none;
+  }
+  #authUsername::placeholder, #authPassword::placeholder{ color: rgba(244,240,255,0.35); }
+
   #pauseOverlay{
     position:absolute; inset:0;
     flex-direction:column; align-items:center; justify-content:center;
@@ -532,19 +559,33 @@
     </div>
   </div>
 
+  <div id="authOverlay">
+    <div class="title" style="font-size:26px;">DESVIO ESTELAR</div>
+    <div class="subtitle" id="authSubtitle">entre na sua conta</div>
+    <input type="text" id="authUsername" placeholder="Nome de usuário" maxlength="18" autocapitalize="off" autocorrect="off">
+    <input type="password" id="authPassword" placeholder="Senha" maxlength="40">
+    <div id="authError" class="msg" style="min-height:16px; font-size:12px; margin:4px 0 10px 0;"></div>
+    <button id="authSubmitBtn" class="ghost-btn">Entrar</button>
+    <div class="msg" style="font-size:12px; margin-top:14px;">
+      <span id="authToggleText">Ainda não tem conta?</span>
+      <span id="authToggleLink" style="color:var(--comet); text-decoration:underline; cursor:pointer;">Cadastre-se</span>
+    </div>
+  </div>
+
   <div id="overlay">
     <button id="donateCornerBtn" aria-label="Apoie o projeto">💜</button>
     <button id="redeemCornerBtn" aria-label="Resgatar código">🎫</button>
     <div class="title">DESVIO ESTELAR</div>
-    <div class="subtitle">um jogo pra passar o tempo</div>
+    <div class="subtitle" id="welcomeSubtitle">um jogo pra passar o tempo</div>
     <div class="msg" id="msgText">Guie sua nave pelo campo de asteroides.<br>Toque e arraste, ou use as setas.<br>Quanto mais tempo vivo, mais rápido fica.</div>
-    <input type="text" id="nameField" placeholder="Seu nome" maxlength="18">
+    <input type="text" id="nameField" placeholder="Seu nome" maxlength="18" readonly>
     <div class="row-btns">
       <button id="startBtn">Começar</button>
       <button id="rankingBtn" class="ghost-btn">Ranking</button>
       <button id="skinsBtn" class="ghost-btn">Naves</button>
       <button id="achievementsBtn" class="ghost-btn">Conquistas</button>
       <button id="donateBtn" class="ghost-btn">Apoie 💜</button>
+      <button id="logoutBtn" class="ghost-btn">Sair da conta</button>
       <button id="shareBtn" class="ghost-btn hidden">Compartilhar</button>
     </div>
   </div>
@@ -1102,14 +1143,148 @@
   };
 
   let db = null;
+  let auth = null;
   let firebaseReady = false;
   try {
     if(firebaseConfig.apiKey !== "SUA_API_KEY"){
       firebase.initializeApp(firebaseConfig);
       db = firebase.firestore();
+      auth = firebase.auth();
       firebaseReady = true;
     }
   } catch(e){ console.warn('Firebase não configurado:', e); }
+
+  // ======= AUTENTICAÇÃO (usuário e senha) =======
+  const authOverlay = document.getElementById('authOverlay');
+  const authUsername = document.getElementById('authUsername');
+  const authPassword = document.getElementById('authPassword');
+  const authError = document.getElementById('authError');
+  const authSubmitBtn = document.getElementById('authSubmitBtn');
+  const authSubtitle = document.getElementById('authSubtitle');
+  const authToggleText = document.getElementById('authToggleText');
+  const authToggleLink = document.getElementById('authToggleLink');
+  const welcomeSubtitle = document.getElementById('welcomeSubtitle');
+  const logoutBtn = document.getElementById('logoutBtn');
+
+  authUsername.addEventListener('keydown', (e)=>{ e.stopPropagation(); });
+  authPassword.addEventListener('keydown', (e)=>{ e.stopPropagation(); });
+
+  let authMode = 'login'; // ou 'register'
+  let currentUsername = '';
+
+  function usernameToEmail(username){
+    return username.trim().toLowerCase().replace(/[^a-z0-9_]/g,'') + '@desvioestelar.game';
+  }
+
+  function validUsername(username){
+    return /^[a-zA-Z0-9_]{3,18}$/.test(username);
+  }
+
+  function setAuthMode(mode){
+    authMode = mode;
+    authError.textContent = '';
+    if(mode === 'login'){
+      authSubtitle.textContent = 'entre na sua conta';
+      authSubmitBtn.textContent = 'Entrar';
+      authToggleText.textContent = 'Ainda não tem conta?';
+      authToggleLink.textContent = 'Cadastre-se';
+    } else {
+      authSubtitle.textContent = 'crie sua conta';
+      authSubmitBtn.textContent = 'Cadastrar';
+      authToggleText.textContent = 'Já tem conta?';
+      authToggleLink.textContent = 'Entrar';
+    }
+  }
+
+  authToggleLink.addEventListener('click', ()=>{
+    setAuthMode(authMode === 'login' ? 'register' : 'login');
+  });
+
+  function translateAuthError(code){
+    const map = {
+      'auth/email-already-in-use': 'Esse nome de usuário já está em uso.',
+      'auth/weak-password': 'A senha precisa ter pelo menos 6 caracteres.',
+      'auth/user-not-found': 'Usuário não encontrado.',
+      'auth/wrong-password': 'Senha incorreta.',
+      'auth/invalid-credential': 'Usuário ou senha incorretos.',
+      'auth/invalid-email': 'Nome de usuário inválido (use só letras, números e _).',
+      'auth/network-request-failed': 'Sem conexão. Tente novamente.',
+      'auth/too-many-requests': 'Muitas tentativas. Aguarde um pouco e tente de novo.',
+    };
+    return map[code] || 'Não foi possível completar. Tente de novo.';
+  }
+
+  async function handleAuthSubmit(){
+    const username = authUsername.value.trim();
+    const password = authPassword.value;
+    authError.textContent = '';
+
+    if(!validUsername(username)){
+      authError.textContent = 'Usuário deve ter 3-18 letras, números ou _.';
+      return;
+    }
+    if(password.length < 6){
+      authError.textContent = 'A senha precisa ter pelo menos 6 caracteres.';
+      return;
+    }
+    if(!firebaseReady){
+      authError.textContent = 'Sem conexão no momento. Tente novamente.';
+      return;
+    }
+
+    authSubmitBtn.disabled = true;
+    const email = usernameToEmail(username);
+
+    try{
+      if(authMode === 'register'){
+        const cred = await auth.createUserWithEmailAndPassword(email, password);
+        await db.collection('users').doc(cred.user.uid).set({
+          username: username,
+          createdAt: Date.now()
+        });
+      } else {
+        await auth.signInWithEmailAndPassword(email, password);
+      }
+      // onAuthStateChanged cuida do resto (esconder tela, carregar perfil)
+    } catch(e){
+      authError.textContent = translateAuthError(e.code);
+    }
+    authSubmitBtn.disabled = false;
+  }
+
+  authSubmitBtn.addEventListener('click', handleAuthSubmit);
+
+  logoutBtn.addEventListener('click', async ()=>{
+    try{ if(auth) await auth.signOut(); }catch(e){}
+  });
+
+  if(firebaseReady){
+    auth.onAuthStateChanged(async (user)=>{
+      if(user){
+        try{
+          const doc = await db.collection('users').doc(user.uid).get();
+          currentUsername = doc.exists ? doc.data().username : (user.email || '').split('@')[0];
+        }catch(e){
+          currentUsername = (user.email || '').split('@')[0];
+        }
+        nameField.value = currentUsername;
+        checkNameSkinUnlock();
+        welcomeSubtitle.textContent = 'bem-vindo(a), ' + currentUsername + '!';
+        try{ window.localStorage.setItem('desvioEstelar_name', currentUsername); }catch(e){}
+        authOverlay.classList.add('hidden');
+      } else {
+        currentUsername = '';
+        authUsername.value = '';
+        authPassword.value = '';
+        setAuthMode('login');
+        authOverlay.classList.remove('hidden');
+      }
+    });
+  } else {
+    // sem Firebase configurado: libera o jogo sem exigir login (modo offline/preview)
+    authOverlay.classList.add('hidden');
+  }
+  // ======= FIM AUTENTICAÇÃO =======
 
   function slugify(name){
     return name.trim().toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'') || 'jogador';
@@ -1159,12 +1334,6 @@
     d.textContent = s;
     return d.innerHTML;
   }
-
-  // lembra o último nome digitado, só de conveniência local
-  try{
-    const savedName = window.localStorage ? window.localStorage.getItem('desvioEstelar_name') : null;
-    if(savedName) nameField.value = savedName;
-  } catch(e){}
 
   rankingBtn.addEventListener('click', ()=>{
     rankingOverlay.classList.remove('hidden');
