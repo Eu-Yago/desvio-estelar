@@ -127,6 +127,70 @@
   }
   #rankingOverlay.hidden{ display:none; }
 
+  #rankedOverlay{
+    position:absolute; inset:0;
+    flex-direction:column; align-items:center; justify-content:center;
+    text-align:center;
+    background: radial-gradient(ellipse at 50% 30%, rgba(45,27,78,0.88) 0%, rgba(5,5,16,0.98) 70%);
+    z-index: 11;
+    padding: 30px;
+    display: flex;
+  }
+  #rankedOverlay.hidden{ display:none; }
+
+  #gameModeOverlay{
+    position:absolute; inset:0;
+    flex-direction:column; align-items:center; justify-content:center;
+    text-align:center;
+    background: radial-gradient(ellipse at 50% 30%, rgba(45,27,78,0.92) 0%, rgba(5,5,16,0.99) 70%);
+    z-index: 14;
+    padding: 30px;
+    display: flex;
+  }
+  #gameModeOverlay.hidden{ display:none; }
+  .mode-btn{
+    background: rgba(244,240,255,0.04);
+    border: 1px solid rgba(244,240,255,0.3);
+    color: var(--star);
+    padding: 16px 24px;
+    font-family: inherit;
+    border-radius: 4px;
+    cursor: pointer;
+    width: 250px;
+    margin-bottom: 12px;
+    display:flex; flex-direction:column; gap:4px;
+  }
+  .mode-btn:active{ background: rgba(244,240,255,0.12); }
+  #modeRanqueadoBtn{ border-color: var(--gold); }
+  .mode-btn-title{ font-size: 15px; letter-spacing: 1px; font-weight:bold; }
+  .mode-btn-desc{ font-size: 10.5px; opacity: 0.65; line-height:1.4; }
+
+  .tier-badge{
+    display:inline-flex; align-items:center; gap:6px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid rgba(244,240,255,0.3);
+    font-size: 11px;
+    letter-spacing: 1px;
+    margin-bottom: 14px;
+  }
+  .tier-badge.hidden{ display:none; }
+
+  #rankedModeIndicator{
+    position:absolute;
+    top: 62px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: var(--gold);
+    font-size: 10px;
+    letter-spacing: 2px;
+    z-index: 5;
+    text-shadow: 0 0 8px rgba(245,197,66,0.6);
+  }
+  #rankedModeIndicator.hidden{ display:none; }
+
+  .rank-row .tier-icon{ margin-right: 4px; }
+
   #skinsOverlay{
     position:absolute; inset:0;
     flex-direction:column; align-items:center; justify-content:center;
@@ -558,6 +622,7 @@
       <div class="hud-num" id="scoreBest">0</div>
     </div>
   </div>
+  <div id="rankedModeIndicator" class="hidden">🏆 RANQUEADO</div>
 
   <div id="authOverlay">
     <div class="title" style="font-size:26px;">DESVIO ESTELAR</div>
@@ -577,6 +642,7 @@
     <button id="redeemCornerBtn" aria-label="Resgatar código">🎫</button>
     <div class="title">DESVIO ESTELAR</div>
     <div class="subtitle" id="welcomeSubtitle">um jogo pra passar o tempo</div>
+    <div id="myTierBadge" class="tier-badge hidden"></div>
     <div class="msg" id="msgText">Guie sua nave pelo campo de asteroides.<br>Toque e arraste, ou use as setas.<br>Quanto mais tempo vivo, mais rápido fica.</div>
     <input type="text" id="nameField" placeholder="Seu nome" maxlength="18" readonly>
     <div class="row-btns">
@@ -588,6 +654,20 @@
       <button id="logoutBtn" class="ghost-btn">Sair da conta</button>
       <button id="shareBtn" class="ghost-btn hidden">Compartilhar</button>
     </div>
+  </div>
+
+  <div id="gameModeOverlay" class="hidden">
+    <div class="title" style="font-size:22px;">QUAL MODO DE JOGO?</div>
+    <div class="subtitle">escolha antes de começar</div>
+    <button id="modeClassicoBtn" class="mode-btn">
+      <span class="mode-btn-title">Clássico</span>
+      <span class="mode-btn-desc">Jogue livre, sem afetar sua patente.</span>
+    </button>
+    <button id="modeRanqueadoBtn" class="mode-btn">
+      <span class="mode-btn-title">🏆 Ranqueado</span>
+      <span class="mode-btn-desc">Ganhe pontos de rank (RP) e suba de patente.</span>
+    </button>
+    <button id="closeGameModeBtn" class="ghost-btn" style="margin-top:14px;">Cancelar</button>
   </div>
 
   <div id="donateOverlay" class="hidden">
@@ -631,10 +711,18 @@
   </div>
 
   <div id="rankingOverlay" class="hidden">
-    <div class="title" style="font-size:26px;">RANKING</div>
+    <div class="title" style="font-size:26px;">RANKING CLÁSSICO</div>
     <div class="subtitle">melhores pontuações</div>
     <div class="rank-list" id="rankList"><div class="rank-empty">Carregando...</div></div>
+    <button id="openRankedFromClassicBtn" class="ghost-btn">Ver Ranqueado</button>
     <button id="closeRankingBtn" class="ghost-btn">Fechar</button>
+  </div>
+
+  <div id="rankedOverlay" class="hidden">
+    <div class="title" style="font-size:26px;">RANKING RANQUEADO</div>
+    <div class="subtitle" id="myRankSubtitle">carregando sua patente...</div>
+    <div class="rank-list" id="rankedList"><div class="rank-empty">Carregando...</div></div>
+    <button id="closeRankedBtn" class="ghost-btn">Fechar</button>
   </div>
 
   <div id="skinsOverlay" class="hidden">
@@ -1272,8 +1360,11 @@
         welcomeSubtitle.textContent = 'bem-vindo(a), ' + currentUsername + '!';
         try{ window.localStorage.setItem('desvioEstelar_name', currentUsername); }catch(e){}
         authOverlay.classList.add('hidden');
+        loadMyRP();
       } else {
         currentUsername = '';
+        myRP = 0;
+        myTierBadge.classList.add('hidden');
         authUsername.value = '';
         authPassword.value = '';
         setAuthMode('login');
@@ -1342,6 +1433,148 @@
   closeRankingBtn.addEventListener('click', ()=>{
     rankingOverlay.classList.add('hidden');
   });
+
+  // ======= MODO RANQUEADO (patentes, RP, ranking separado) =======
+  const TIERS = [
+    { name:'Bronze',   min:0,    icon:'🥉', color:'#c17a4a' },
+    { name:'Prata',    min:1500, icon:'🥈', color:'#c7d0d8' },
+    { name:'Ouro',     min:3500, icon:'🥇', color:'#f5c542' },
+    { name:'Platina',  min:6000, icon:'💠', color:'#7ce8d8' },
+    { name:'Mestre',   min:9000, icon:'👑', color:'#ff6fd8' },
+  ];
+
+  function getTierForRP(rp){
+    let current = TIERS[0];
+    for(const t of TIERS){
+      if(rp >= t.min) current = t;
+    }
+    return current;
+  }
+
+  function rpGainedFromScore(score){
+    return Math.max(1, Math.floor(score / 20));
+  }
+
+  const gameModeOverlay = document.getElementById('gameModeOverlay');
+  const modeClassicoBtn = document.getElementById('modeClassicoBtn');
+  const modeRanqueadoBtn = document.getElementById('modeRanqueadoBtn');
+  const closeGameModeBtn = document.getElementById('closeGameModeBtn');
+  const rankedModeIndicator = document.getElementById('rankedModeIndicator');
+  const myTierBadge = document.getElementById('myTierBadge');
+  const rankedOverlay = document.getElementById('rankedOverlay');
+  const rankedList = document.getElementById('rankedList');
+  const myRankSubtitle = document.getElementById('myRankSubtitle');
+  const closeRankedBtn = document.getElementById('closeRankedBtn');
+  const openRankedFromClassicBtn = document.getElementById('openRankedFromClassicBtn');
+
+  let gameMode = 'classico';
+  let myRP = 0;
+
+  function updateMyTierBadge(){
+    if(!auth || !auth.currentUser){
+      myTierBadge.classList.add('hidden');
+      return;
+    }
+    const tier = getTierForRP(myRP);
+    myTierBadge.innerHTML = tier.icon + ' ' + tier.name + ' <span style="opacity:0.6;">(' + myRP + ' RP)</span>';
+    myTierBadge.style.borderColor = tier.color;
+    myTierBadge.style.color = tier.color;
+    myTierBadge.classList.remove('hidden');
+  }
+
+  async function loadMyRP(){
+    if(!firebaseReady || !auth || !auth.currentUser) return;
+    try{
+      const doc = await db.collection('rankedProfiles').doc(auth.currentUser.uid).get();
+      myRP = doc.exists ? (doc.data().rp || 0) : 0;
+    }catch(e){ console.warn('Erro ao carregar RP:', e); }
+    updateMyTierBadge();
+  }
+
+  async function saveRankedResult(finalScore){
+    if(!firebaseReady || !auth || !auth.currentUser) return;
+    const gained = rpGainedFromScore(finalScore);
+    const uid = auth.currentUser.uid;
+    try{
+      const ref = db.collection('rankedProfiles').doc(uid);
+      const doc = await ref.get();
+      const previousRP = doc.exists ? (doc.data().rp || 0) : 0;
+      const newRP = previousRP + gained;
+      await ref.set({
+        username: currentUsername,
+        rp: newRP,
+        updatedAt: Date.now()
+      });
+      myRP = newRP;
+      updateMyTierBadge();
+      return { gained, newRP, tier: getTierForRP(newRP) };
+    }catch(e){
+      console.warn('Erro ao salvar resultado ranqueado:', e);
+      return null;
+    }
+  }
+
+  async function loadRankedLeaderboard(){
+    rankedList.innerHTML = '<div class="rank-empty">Carregando...</div>';
+    if(auth && auth.currentUser){
+      const tier = getTierForRP(myRP);
+      myRankSubtitle.innerHTML = 'você é ' + tier.icon + ' <b style="color:' + tier.color + '">' + tier.name + '</b> (' + myRP + ' RP)';
+    } else {
+      myRankSubtitle.textContent = 'patentes: melhores jogadores';
+    }
+    if(!firebaseReady){
+      rankedList.innerHTML = '<div class="rank-empty">Ranking online não configurado ainda.</div>';
+      return;
+    }
+    try{
+      const snap = await db.collection('rankedProfiles').orderBy('rp','desc').limit(20).get();
+      if(snap.empty){
+        rankedList.innerHTML = '<div class="rank-empty">Ninguém jogou ranqueado ainda. Seja o primeiro!</div>';
+        return;
+      }
+      let html = '';
+      let pos = 1;
+      snap.forEach(doc=>{
+        const d = doc.data();
+        const tier = getTierForRP(d.rp || 0);
+        html += '<div class="rank-row"><span class="pos">'+pos+'</span><span class="rname"><span class="tier-icon">'+tier.icon+'</span>'+escapeHtml(d.username||'?')+'</span><span class="rscore" style="color:'+tier.color+'">'+(d.rp||0)+' RP</span></div>';
+        pos++;
+      });
+      rankedList.innerHTML = html;
+    } catch(e){
+      rankedList.innerHTML = '<div class="rank-empty">Não foi possível carregar o ranking.</div>';
+      console.warn(e);
+    }
+  }
+
+  openRankedFromClassicBtn.addEventListener('click', ()=>{
+    rankingOverlay.classList.add('hidden');
+    rankedOverlay.classList.remove('hidden');
+    loadRankedLeaderboard();
+  });
+  closeRankedBtn.addEventListener('click', ()=>{
+    rankedOverlay.classList.add('hidden');
+  });
+
+  // fluxo: clicar em "Começar" abre a escolha de modo, em vez de iniciar direto
+  function openGameModeOverlay(){
+    gameModeOverlay.classList.remove('hidden');
+  }
+  closeGameModeBtn.addEventListener('click', ()=>{
+    gameModeOverlay.classList.add('hidden');
+  });
+  modeClassicoBtn.addEventListener('click', ()=>{
+    gameMode = 'classico';
+    gameModeOverlay.classList.add('hidden');
+    startGame();
+  });
+  modeRanqueadoBtn.addEventListener('click', ()=>{
+    gameMode = 'ranqueado';
+    gameModeOverlay.classList.add('hidden');
+    startGame();
+  });
+  // ======= FIM MODO RANQUEADO =======
+
   // ======= FIM FIREBASE =======
 
   // ======= RECORDE (persistido no aparelho) =======
@@ -1834,6 +2067,7 @@
     running = false;
     pauseBtn.classList.add('hidden');
     laserBtn.classList.add('hidden');
+    rankedModeIndicator.classList.add('hidden');
     explode(ship.x, ship.y);
     if(navigator.vibrate) navigator.vibrate([40, 30, 80]);
     const finalScore = Math.floor(score);
@@ -1853,10 +2087,14 @@
     const playerName = nameField.value.trim();
     if(playerName){
       try{ if(window.localStorage) window.localStorage.setItem('desvioEstelar_name', playerName); } catch(e){}
-      saveScoreOnline(playerName, finalScore);
     }
-    setTimeout(()=>{
+
+    const finishGameOverScreen = (rankedResult)=>{
       let msg = 'Você marcou <b style="color:#f5c542">' + finalScore + '</b> pontos.<br>Os asteroides pegaram você.<br>Tenta de novo?';
+      if(rankedResult){
+        const t = rankedResult.tier;
+        msg += '<br><br><b style="color:' + t.color + '">+' + rankedResult.gained + ' RP</b> — você é ' + t.icon + ' <b style="color:' + t.color + '">' + t.name + '</b> (' + rankedResult.newRP + ' RP)';
+      }
       if(newlyUnlocked.length){
         const names = newlyUnlocked.map(s=>s.name).join(', ');
         msg += '<br><br><b style="color:#7ce8d8">Nova nave desbloqueada: ' + names + '!</b>';
@@ -1865,7 +2103,16 @@
       startBtn.textContent = 'Jogar de novo';
       shareBtn.classList.remove('hidden');
       overlay.classList.remove('hidden');
-    }, 500);
+    };
+
+    if(gameMode === 'ranqueado'){
+      saveRankedResult(finalScore).then(result=>{
+        setTimeout(()=> finishGameOverScreen(result), 500);
+      });
+    } else {
+      if(playerName) saveScoreOnline(playerName, finalScore);
+      setTimeout(()=> finishGameOverScreen(null), 500);
+    }
   }
 
   function drawShip(){
@@ -2115,9 +2362,10 @@
     pauseBtn.classList.remove('hidden');
     laserBtn.classList.remove('hidden');
     shareBtn.classList.add('hidden');
+    rankedModeIndicator.classList.toggle('hidden', gameMode !== 'ranqueado');
   }
 
-  startBtn.addEventListener('click', startGame);
+  startBtn.addEventListener('click', openGameModeOverlay);
 
   initStars();
   ship = { x: W/2, y: H-110, w:30, h:38, targetX: W/2, trail: [] };
