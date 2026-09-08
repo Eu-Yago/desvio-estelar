@@ -1455,6 +1455,16 @@
     return Math.max(1, Math.floor(score / 20));
   }
 
+  const EARLY_DEATH_THRESHOLD_SECONDS = 50;
+  const EARLY_DEATH_PENALTY = 25;
+
+  function computeRPChange(score, survivalSeconds){
+    if(survivalSeconds < EARLY_DEATH_THRESHOLD_SECONDS){
+      return { change: -EARLY_DEATH_PENALTY, isPenalty: true };
+    }
+    return { change: rpGainedFromScore(score), isPenalty: false };
+  }
+
   const gameModeOverlay = document.getElementById('gameModeOverlay');
   const modeClassicoBtn = document.getElementById('modeClassicoBtn');
   const modeRanqueadoBtn = document.getElementById('modeRanqueadoBtn');
@@ -1491,15 +1501,15 @@
     updateMyTierBadge();
   }
 
-  async function saveRankedResult(finalScore){
+  async function saveRankedResult(finalScore, survivalSeconds){
     if(!firebaseReady || !auth || !auth.currentUser) return;
-    const gained = rpGainedFromScore(finalScore);
+    const { change, isPenalty } = computeRPChange(finalScore, survivalSeconds || 0);
     const uid = auth.currentUser.uid;
     try{
       const ref = db.collection('rankedProfiles').doc(uid);
       const doc = await ref.get();
       const previousRP = doc.exists ? (doc.data().rp || 0) : 0;
-      const newRP = previousRP + gained;
+      const newRP = Math.max(0, previousRP + change);
       await ref.set({
         username: currentUsername,
         rp: newRP,
@@ -1507,7 +1517,7 @@
       });
       myRP = newRP;
       updateMyTierBadge();
-      return { gained, newRP, tier: getTierForRP(newRP) };
+      return { gained: change, isPenalty, newRP, tier: getTierForRP(newRP) };
     }catch(e){
       console.warn('Erro ao salvar resultado ranqueado:', e);
       return null;
@@ -2093,7 +2103,11 @@
       let msg = 'Você marcou <b style="color:#f5c542">' + finalScore + '</b> pontos.<br>Os asteroides pegaram você.<br>Tenta de novo?';
       if(rankedResult){
         const t = rankedResult.tier;
-        msg += '<br><br><b style="color:' + t.color + '">+' + rankedResult.gained + ' RP</b> — você é ' + t.icon + ' <b style="color:' + t.color + '">' + t.name + '</b> (' + rankedResult.newRP + ' RP)';
+        if(rankedResult.isPenalty){
+          msg += '<br><br><b style="color:#ff5d73">' + rankedResult.gained + ' RP</b> (morreu muito rápido, antes de ' + EARLY_DEATH_THRESHOLD_SECONDS + 's) — você é ' + t.icon + ' <b style="color:' + t.color + '">' + t.name + '</b> (' + rankedResult.newRP + ' RP)';
+        } else {
+          msg += '<br><br><b style="color:' + t.color + '">+' + rankedResult.gained + ' RP</b> — você é ' + t.icon + ' <b style="color:' + t.color + '">' + t.name + '</b> (' + rankedResult.newRP + ' RP)';
+        }
       }
       if(newlyUnlocked.length){
         const names = newlyUnlocked.map(s=>s.name).join(', ');
@@ -2106,7 +2120,7 @@
     };
 
     if(gameMode === 'ranqueado'){
-      saveRankedResult(finalScore).then(result=>{
+      saveRankedResult(finalScore, elapsed).then(result=>{
         setTimeout(()=> finishGameOverScreen(result), 500);
       });
     } else {
