@@ -1455,12 +1455,20 @@
     return Math.max(1, Math.floor(score / 20));
   }
 
-  const EARLY_DEATH_THRESHOLD_SECONDS = 50;
-  const EARLY_DEATH_PENALTY = 25;
+  // regra de sobrevivência mínima e penalidade, conforme a patente atual do jogador
+  const TIER_PENALTY_RULES = {
+    'Bronze':  { threshold: 50,  penalty: 25 },
+    'Prata':   { threshold: 50,  penalty: 25 },
+    'Ouro':    { threshold: 90,  penalty: 40 },
+    'Platina': { threshold: 105, penalty: 55 },
+    'Mestre':  { threshold: 120, penalty: 75 },
+  };
 
-  function computeRPChange(score, survivalSeconds){
-    if(survivalSeconds < EARLY_DEATH_THRESHOLD_SECONDS){
-      return { change: -EARLY_DEATH_PENALTY, isPenalty: true };
+  function computeRPChange(score, survivalSeconds, currentRP){
+    const tier = getTierForRP(currentRP || 0);
+    const rule = TIER_PENALTY_RULES[tier.name];
+    if(survivalSeconds < rule.threshold){
+      return { change: -rule.penalty, isPenalty: true, threshold: rule.threshold, penalty: rule.penalty };
     }
     return { change: rpGainedFromScore(score), isPenalty: false };
   }
@@ -1503,12 +1511,12 @@
 
   async function saveRankedResult(finalScore, survivalSeconds){
     if(!firebaseReady || !auth || !auth.currentUser) return;
-    const { change, isPenalty } = computeRPChange(finalScore, survivalSeconds || 0);
     const uid = auth.currentUser.uid;
     try{
       const ref = db.collection('rankedProfiles').doc(uid);
       const doc = await ref.get();
       const previousRP = doc.exists ? (doc.data().rp || 0) : 0;
+      const { change, isPenalty, threshold } = computeRPChange(finalScore, survivalSeconds || 0, previousRP);
       const newRP = Math.max(0, previousRP + change);
       await ref.set({
         username: currentUsername,
@@ -1517,7 +1525,7 @@
       });
       myRP = newRP;
       updateMyTierBadge();
-      return { gained: change, isPenalty, newRP, tier: getTierForRP(newRP) };
+      return { gained: change, isPenalty, threshold, newRP, tier: getTierForRP(newRP) };
     }catch(e){
       console.warn('Erro ao salvar resultado ranqueado:', e);
       return null;
@@ -2104,7 +2112,9 @@
       if(rankedResult){
         const t = rankedResult.tier;
         if(rankedResult.isPenalty){
-          msg += '<br><br><b style="color:#ff5d73">' + rankedResult.gained + ' RP</b> (morreu muito rápido, antes de ' + EARLY_DEATH_THRESHOLD_SECONDS + 's) — você é ' + t.icon + ' <b style="color:' + t.color + '">' + t.name + '</b> (' + rankedResult.newRP + ' RP)';
+          const thresh = rankedResult.threshold;
+          const threshLabel = thresh >= 60 ? (Math.floor(thresh/60) + ':' + String(thresh%60).padStart(2,'0')) : (thresh + 's');
+          msg += '<br><br><b style="color:#ff5d73">' + rankedResult.gained + ' RP</b> (morreu antes de ' + threshLabel + ') — você é ' + t.icon + ' <b style="color:' + t.color + '">' + t.name + '</b> (' + rankedResult.newRP + ' RP)';
         } else {
           msg += '<br><br><b style="color:' + t.color + '">+' + rankedResult.gained + ' RP</b> — você é ' + t.icon + ' <b style="color:' + t.color + '">' + t.name + '</b> (' + rankedResult.newRP + ' RP)';
         }
