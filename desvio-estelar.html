@@ -832,6 +832,7 @@
       window.localStorage.setItem('desvioEstelar_achievements', JSON.stringify(unlockedAchievements));
       window.localStorage.setItem('desvioEstelar_stats', JSON.stringify(gameStats));
     }catch(e){}
+    syncProgressToCloud();
   }
 
   let toastQueue = [];
@@ -1335,11 +1336,21 @@
   if(firebaseReady){
     auth.onAuthStateChanged(async (user)=>{
       if(user){
+        let cloudData = null;
         try{
           const doc = await db.collection('users').doc(user.uid).get();
-          currentUsername = doc.exists ? doc.data().username : (user.email || '').split('@')[0];
+          cloudData = doc.exists ? doc.data() : null;
+          currentUsername = cloudData ? cloudData.username : (user.email || '').split('@')[0];
         }catch(e){
           currentUsername = (user.email || '').split('@')[0];
+        }
+        if(cloudData){
+          if(Array.isArray(cloudData.unlockedSkins)) unlockedSkins = cloudData.unlockedSkins;
+          if(cloudData.selectedSkinId) selectedSkinId = cloudData.selectedSkinId;
+          if(cloudData.customColors) customColors = cloudData.customColors;
+          if(Array.isArray(cloudData.pixelGrid)) pixelGrid = cloudData.pixelGrid;
+          if(Array.isArray(cloudData.unlockedAchievements)) unlockedAchievements = cloudData.unlockedAchievements;
+          if(cloudData.gameStats) gameStats = cloudData.gameStats;
         }
         nameField.value = currentUsername;
         checkNameSkinUnlock();
@@ -1624,6 +1635,15 @@
 
   function saveCustomColors(){
     try{ window.localStorage.setItem('desvioEstelar_customColors', JSON.stringify(customColors)); }catch(e){}
+    syncProgressToCloud();
+  }
+
+  function syncProgressToCloud(){
+    if(!firebaseReady || !auth || !auth.currentUser) return;
+    db.collection('users').doc(auth.currentUser.uid).set({
+      unlockedSkins, selectedSkinId, customColors, pixelGrid,
+      unlockedAchievements, gameStats
+    }, { merge: true }).catch(e=>console.warn('Erro ao sincronizar:', e));
   }
 
   function getSelectedSkin(){
@@ -1659,6 +1679,7 @@
       window.localStorage.setItem('desvioEstelar_unlocked', JSON.stringify(unlockedSkins));
       window.localStorage.setItem('desvioEstelar_skin', selectedSkinId);
     }catch(e){}
+    syncProgressToCloud();
   }
 
   function checkSkinUnlocks(currentBest){
