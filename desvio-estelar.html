@@ -1344,13 +1344,15 @@
         }catch(e){
           currentUsername = (user.email || '').split('@')[0];
         }
-        if(cloudData){
-          if(Array.isArray(cloudData.unlockedSkins)) unlockedSkins = cloudData.unlockedSkins;
+        if(cloudData && Array.isArray(cloudData.unlockedSkins)){
+          unlockedSkins = cloudData.unlockedSkins;
           if(cloudData.selectedSkinId) selectedSkinId = cloudData.selectedSkinId;
           if(cloudData.customColors) customColors = cloudData.customColors;
           if(Array.isArray(cloudData.pixelGrid)) pixelGrid = cloudData.pixelGrid;
           if(Array.isArray(cloudData.unlockedAchievements)) unlockedAchievements = cloudData.unlockedAchievements;
           if(cloudData.gameStats) gameStats = cloudData.gameStats;
+        } else {
+          syncProgressToCloud(); // primeira vez: envia o progresso local (antigo) pra nuvem
         }
         nameField.value = currentUsername;
         checkNameSkinUnlock();
