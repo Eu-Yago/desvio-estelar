@@ -1345,15 +1345,17 @@
           currentUsername = (user.email || '').split('@')[0];
         }
         if(cloudData && Array.isArray(cloudData.unlockedSkins)){
-          unlockedSkins = cloudData.unlockedSkins;
-          if(cloudData.selectedSkinId) selectedSkinId = cloudData.selectedSkinId;
-          if(cloudData.customColors) customColors = cloudData.customColors;
-          if(Array.isArray(cloudData.pixelGrid)) pixelGrid = cloudData.pixelGrid;
-          if(Array.isArray(cloudData.unlockedAchievements)) unlockedAchievements = cloudData.unlockedAchievements;
-          if(cloudData.gameStats) gameStats = cloudData.gameStats;
-        } else {
-          syncProgressToCloud(); // primeira vez: envia o progresso local (antigo) pra nuvem
+          unlockedSkins = [...new Set([...unlockedSkins, ...cloudData.unlockedSkins])];
+          unlockedAchievements = [...new Set([...unlockedAchievements, ...(cloudData.unlockedAchievements||[])])];
+          if(!pixelGrid && Array.isArray(cloudData.pixelGrid)) pixelGrid = cloudData.pixelGrid;
+          if(selectedSkinId === 'estelar' && cloudData.selectedSkinId) selectedSkinId = cloudData.selectedSkinId;
+          if(cloudData.customColors && customColors.inner === '#7ce8d8') customColors = cloudData.customColors;
+          if(cloudData.gameStats){
+            gameStats.gamesPlayed = Math.max(gameStats.gamesPlayed, cloudData.gameStats.gamesPlayed||0);
+            gameStats.laserKills = Math.max(gameStats.laserKills, cloudData.gameStats.laserKills||0);
+          }
         }
+        syncProgressToCloud(); // sempre reenvia o resultado já unido (nunca perde nada de nenhum aparelho)
         nameField.value = currentUsername;
         checkNameSkinUnlock();
         welcomeSubtitle.textContent = 'bem-vindo(a), ' + currentUsername + '!';
