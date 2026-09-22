@@ -1340,7 +1340,7 @@
         try{
           const doc = await db.collection('users').doc(user.uid).get();
           cloudData = doc.exists ? doc.data() : null;
-          currentUsername = cloudData ? cloudData.username : (user.email || '').split('@')[0];
+          currentUsername = (cloudData && cloudData.username) ? cloudData.username : (user.email || '').split('@')[0];
         }catch(e){
           currentUsername = (user.email || '').split('@')[0];
         }
@@ -1645,6 +1645,7 @@
   function syncProgressToCloud(){
     if(!firebaseReady || !auth || !auth.currentUser) return;
     db.collection('users').doc(auth.currentUser.uid).set({
+      username: currentUsername,
       unlockedSkins, selectedSkinId, customColors, pixelGrid,
       unlockedAchievements, gameStats
     }, { merge: true }).catch(e=>console.warn('Erro ao sincronizar:', e));
