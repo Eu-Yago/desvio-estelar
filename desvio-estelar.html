@@ -259,6 +259,15 @@
     z-index: 12;
   }
   #redeemCornerBtn:active{ background: rgba(244,240,255,0.15); }
+  #soundToggleBtn{
+    position:absolute; top: 64px; left: 16px;
+    width: 40px; height: 40px; border-radius: 50%;
+    border: 1px solid rgba(244,240,255,0.35);
+    background: rgba(10,10,22,0.4);
+    display:flex; align-items:center; justify-content:center;
+    font-size: 17px; cursor: pointer; z-index: 12;
+  }
+  #soundToggleBtn:active{ background: rgba(244,240,255,0.15); }
 
   #redeemOverlay{
     position:absolute; inset:0;
@@ -639,6 +648,7 @@
 
   <div id="overlay">
     <button id="redeemCornerBtn" aria-label="Resgatar código">🎫</button>
+    <button id="soundToggleBtn" aria-label="Som">🔊</button>
     <div class="title">DESVIO ESTELAR</div>
     <div class="subtitle" id="welcomeSubtitle">um jogo pra passar o tempo</div>
     <div id="myTierBadge" class="tier-badge hidden"></div>
@@ -1819,8 +1829,10 @@
       h: 38,
       targetX: W/2,
       targetY: H - 110,
-      trail: []
+      trail: [],
+      intro: 0
     };
+    ship.y = H + 70;
     asteroids = [];
     particles = [];
     laserBeams = [];
@@ -1831,7 +1843,7 @@
     score = 0;
     speedMul = 1;
     elapsed = 0;
-    spawnTimer = 0;
+    spawnTimer = 1.6;
     running = true;
     paused = false;
     dragX = null;
@@ -1913,8 +1925,18 @@
   // ======= SOM (marcos de pontuação) =======
   let audioCtx = null;
   let lastMilestone = 0;
+  let soundMuted = false;
+  try{ soundMuted = window.localStorage.getItem('desvioEstelar_muted') === '1'; }catch(e){}
+  const soundToggleBtn = document.getElementById('soundToggleBtn');
+  soundToggleBtn.textContent = soundMuted ? '🔇' : '🔊';
+  soundToggleBtn.addEventListener('click', ()=>{
+    soundMuted = !soundMuted;
+    soundToggleBtn.textContent = soundMuted ? '🔇' : '🔊';
+    try{ window.localStorage.setItem('desvioEstelar_muted', soundMuted ? '1' : '0'); }catch(e){}
+  });
 
   function getAudioCtx(){
+    if(soundMuted) return null;
     if(!audioCtx){
       try{ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
       catch(e){ return null; }
@@ -2043,13 +2065,26 @@
     planets = planets.filter(p=> p.y - p.r < H + 60);
 
     // ship movement toward target (horizontal + vertical)
+    const INTRO_DUR = 0.9;
+    const introActive = ship.intro !== undefined && ship.intro < INTRO_DUR;
+    if(introActive){
+      ship.intro += dt;
+      const k = Math.min(1, ship.intro / INTRO_DUR);
+      const e = 1 - Math.pow(1 - k, 3);
+      const baseY = H - 110;
+      ship.y = (H + 70) + (baseY - (H + 70)) * e;
+      ship.targetY = baseY;
+      addThrust(); addThrust();
+    }
     const dx = ship.targetX - ship.x;
     ship.x += dx * 0.18;
     ship.x = Math.max(ship.w, Math.min(W-ship.w, ship.x));
 
-    const dy = ship.targetY - ship.y;
-    ship.y += dy * 0.18;
-    ship.y = Math.max(ship.h, Math.min(H-ship.h*0.6, ship.y));
+    if(!introActive){
+      const dy = ship.targetY - ship.y;
+      ship.y += dy * 0.18;
+      ship.y = Math.max(ship.h, Math.min(H-ship.h*0.6, ship.y));
+    }
 
     if(Math.random() < 0.6) addThrust();
 
@@ -2079,7 +2114,7 @@
     asteroids = asteroids.filter(a=> a.y - a.r < H + 40);
 
     // collision
-    for(const a of asteroids){
+    for(const a of (introActive ? [] : asteroids)){
       const ddx = a.x - ship.x;
       const ddy = a.y - (ship.y+6);
       const dist = Math.sqrt(ddx*ddx+ddy*ddy);
@@ -2154,6 +2189,12 @@
   function drawShip(){
     ctx.save();
     ctx.translate(ship.x, ship.y);
+    if(ship.intro !== undefined && ship.intro < 0.9){
+      const k = ship.intro / 0.9;
+      ctx.globalAlpha = 0.35 + 0.65*k;
+      const sc = 1.5 - 0.5*k;
+      ctx.scale(sc, sc);
+    }
     const skin = resolveSkinColors(getSelectedSkin());
 
     if(skin.custom && pixelGrid && pixelGrid.some(c=>c)){
