@@ -212,6 +212,16 @@
     display: flex;
   }
   #achievementsOverlay.hidden{ display:none; }
+  #missionsOverlay{
+    position:absolute; inset:0;
+    flex-direction:column; align-items:center; justify-content:center;
+    text-align:center;
+    background: radial-gradient(ellipse at 50% 30%, rgba(45,27,78,0.88) 0%, rgba(5,5,16,0.98) 70%);
+    z-index: 11; padding: 30px; display: flex;
+  }
+  #missionsOverlay.hidden{ display:none; }
+  .mis-bar{ height:6px; border-radius:3px; background:rgba(244,240,255,0.15); margin-top:6px; overflow:hidden; }
+  .mis-bar > div{ height:100%; background:#7ce8d8; }
 
   #donateOverlay{
     position:absolute; inset:0;
@@ -658,6 +668,7 @@
       <button id="startBtn">Começar</button>
       <button id="rankingBtn" class="ghost-btn">Ranking</button>
       <button id="skinsBtn" class="ghost-btn">Naves</button>
+      <button id="missionsBtn" class="ghost-btn">Missões</button>
       <button id="achievementsBtn" class="ghost-btn">Conquistas</button>
       <button id="profileBtn" class="ghost-btn">Perfil</button>
       <button id="logoutBtn" class="ghost-btn">Sair da conta</button>
@@ -738,6 +749,13 @@
     <div class="subtitle">escolha sua nave</div>
     <div class="skins-grid" id="skinsGrid"></div>
     <button id="closeSkinsBtn" class="ghost-btn">Fechar</button>
+  </div>
+
+  <div id="missionsOverlay" class="hidden">
+    <div class="title" style="font-size:26px;">MISSÕES DO DIA</div>
+    <div class="subtitle" id="missionsProgress"></div>
+    <div class="ach-list" id="missionsList"></div>
+    <button id="closeMissionsBtn" class="ghost-btn">Fechar</button>
   </div>
 
   <div id="achievementsOverlay" class="hidden">
@@ -829,7 +847,7 @@
   ];
 
   let unlockedAchievements = [];
-  let gameStats = { gamesPlayed: 0, laserKills: 0 };
+  let gameStats = { gamesPlayed: 0, laserKills: 0, missionsDone: 0 };
   try{
     const storedAch = JSON.parse(window.localStorage.getItem('desvioEstelar_achievements') || '[]');
     if(Array.isArray(storedAch)) unlockedAchievements = storedAch;
@@ -902,6 +920,108 @@
     achievementsOverlay.classList.add('hidden');
   });
   // ======= FIM CONQUISTAS =======
+
+  // ======= MISSÕES DIÁRIAS =======
+  const MISSION_POOL = [
+    { id:'score500',  icon:'⭐', desc:'Faça 500 pontos em uma partida.',  type:'max', stat:'score', goal:500 },
+    { id:'score1500', icon:'🌟', desc:'Faça 1.500 pontos em uma partida.', type:'max', stat:'score', goal:1500 },
+    { id:'score3000', icon:'💫', desc:'Faça 3.000 pontos em uma partida.', type:'max', stat:'score', goal:3000 },
+    { id:'time45',    icon:'⏱️', desc:'Sobreviva 45 segundos numa partida.', type:'max', stat:'time', goal:45 },
+    { id:'time90',    icon:'🕐', desc:'Sobreviva 90 segundos numa partida.', type:'max', stat:'time', goal:90 },
+    { id:'games3',    icon:'🎮', desc:'Jogue 3 partidas hoje.',            type:'sum', stat:'games', goal:3 },
+    { id:'lasers8',   icon:'🎯', desc:'Destrua 8 asteroides com o laser.', type:'sum', stat:'laser', goal:8 },
+    { id:'nolaser',   icon:'🔥', desc:'Termine uma partida sem usar o laser.', type:'sum', stat:'nolaser', goal:1 },
+  ];
+
+  function todayKey(){
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  }
+
+  let dailyState = null;
+  function loadDaily(){
+    const key = todayKey();
+    try{
+      const st = JSON.parse(window.localStorage.getItem('desvioEstelar_daily') || 'null');
+      if(st && st.date === key && Array.isArray(st.ids)){ dailyState = st; return; }
+    }catch(e){}
+    let seed = 0;
+    for(let i=0;i<key.length;i++) seed = (seed*31 + key.charCodeAt(i)) >>> 0;
+    const pool = MISSION_POOL.map(m=>m.id);
+    const ids = [];
+    while(ids.length < 3){
+      seed = (seed*1664525 + 1013904223) >>> 0;
+      const pick = pool.splice(seed % pool.length, 1)[0];
+      ids.push(pick);
+    }
+    dailyState = { date:key, ids, progress:{}, done:[] };
+    saveDaily();
+  }
+  function saveDaily(){
+    try{ window.localStorage.setItem('desvioEstelar_daily', JSON.stringify(dailyState)); }catch(e){}
+  }
+
+  function missionProgress(stat, value){
+    if(!dailyState || dailyState.date !== todayKey()) loadDaily();
+    let changed = false;
+    dailyState.ids.forEach(id=>{
+      if(dailyState.done.includes(id)) return;
+      const m = MISSION_POOL.find(x=>x.id===id);
+      if(!m || m.stat !== stat) return;
+      const cur = dailyState.progress[id] || 0;
+      const next = m.type === 'max' ? Math.max(cur, value) : cur + value;
+      dailyState.progress[id] = next;
+      changed = true;
+      if(next >= m.goal){
+        dailyState.done.push(id);
+        gameStats.missionsDone = (gameStats.missionsDone||0) + 1;
+        saveAchievementState();
+        toastQueue.push({ icon:'📅', name:'Missão cumprida!' });
+        processToastQueue();
+        checkMissionSkins();
+      }
+    });
+    if(changed) saveDaily();
+  }
+
+  function checkMissionSkins(){
+    SKINS.forEach(skin=>{
+      if(skin.unlockType === 'missions' && (gameStats.missionsDone||0) >= skin.unlock && !unlockedSkins.includes(skin.id)){
+        unlockedSkins.push(skin.id);
+        saveSkinState();
+        toastQueue.push({ icon:'🚀', name:'Nova nave: ' + skin.name });
+        processToastQueue();
+      }
+    });
+  }
+
+  const missionsBtn = document.getElementById('missionsBtn');
+  const missionsOverlay = document.getElementById('missionsOverlay');
+  const missionsList = document.getElementById('missionsList');
+  const missionsProgress = document.getElementById('missionsProgress');
+  document.getElementById('closeMissionsBtn').addEventListener('click', ()=> missionsOverlay.classList.add('hidden'));
+  missionsBtn.addEventListener('click', ()=>{
+    if(!dailyState || dailyState.date !== todayKey()) loadDaily();
+    missionsList.innerHTML = '';
+    dailyState.ids.forEach(id=>{
+      const m = MISSION_POOL.find(x=>x.id===id);
+      const done = dailyState.done.includes(id);
+      const cur = Math.min(m.goal, Math.floor(dailyState.progress[id] || 0));
+      const pct = Math.round(cur / m.goal * 100);
+      const row = document.createElement('div');
+      row.className = 'ach-row ' + (done ? 'unlocked' : 'locked');
+      row.innerHTML = '<div class="ach-icon">' + (done ? '✅' : m.icon) + '</div>' +
+        '<div class="ach-info"><div class="ach-title">' + m.desc + '</div>' +
+        '<div class="ach-desc">' + cur + ' / ' + m.goal + '</div><div class="mis-bar"><div style="width:' + pct + '%"></div></div></div>';
+      missionsList.appendChild(row);
+    });
+    const n = gameStats.missionsDone || 0;
+    const next = SKINS.filter(s=>s.unlockType==='missions' && !unlockedSkins.includes(s.id)).sort((a,b)=>a.unlock-b.unlock)[0];
+    missionsProgress.textContent = 'Missões cumpridas: ' + n + (next ? ' • próxima nave "' + next.name + '" com ' + next.unlock : ' • todas as naves de missão desbloqueadas!');
+    missionsOverlay.classList.remove('hidden');
+  });
+  loadDaily();
+  // ======= FIM MISSÕES =======
 
   // ======= PERFIL =======
   const profileBtn = document.getElementById('profileBtn');
@@ -1363,6 +1483,7 @@
           if(cloudData.gameStats){
             gameStats.gamesPlayed = Math.max(gameStats.gamesPlayed, cloudData.gameStats.gamesPlayed||0);
             gameStats.laserKills = Math.max(gameStats.laserKills, cloudData.gameStats.laserKills||0);
+            gameStats.missionsDone = Math.max(gameStats.missionsDone||0, cloudData.gameStats.missionsDone||0);
           }
         }
         syncProgressToCloud(); // sempre reenvia o resultado já unido (nunca perde nada de nenhum aparelho)
@@ -1633,6 +1754,8 @@
     { id:'fundador',  name:'Fundador',  hull:'#1c1c26', inner:'#ffd54a', glow:'rgba(255,213,74,0.9)',  thrust:'#ffd54a', laser:'#ffd54a', unlockType:'name' },
     { id:'lendaria',  name:'Lendária',  hull:'#ffffff', inner:'#ff2fe0', glow:'rgba(255,255,255,0.85)', thrust:'#ff2fe0', laser:'#ff2fe0', unlockType:'achievements', dynamic:true },
     { id:'personalizada', name:'Crie sua Nave', hull:'#ffffff', inner:'#7ce8d8', glow:'rgba(255,255,255,0.7)', thrust:'#7ce8d8', laser:'#7ce8d8', unlockType:'code', custom:true },
+    { id:'cometa',    name:'Cometa',    hull:'#d6f1ff', inner:'#4db8ff', glow:'rgba(77,184,255,0.8)',  thrust:'#4db8ff', laser:'#4db8ff', unlockType:'missions', unlock:7 },
+    { id:'aurora',    name:'Aurora',    hull:'#e6ffe9', inner:'#b36bff', glow:'rgba(179,107,255,0.8)', thrust:'#b36bff', laser:'#3dffa0', unlockType:'missions', unlock:20 },
   ];
 
   let unlockedSkins = ['estelar'];
@@ -1753,6 +1876,7 @@
     if(skin.unlockType === 'name') return 'Segredo';
     if(skin.unlockType === 'achievements') return 'Todas conquistas';
     if(skin.unlockType === 'code') return 'R$ 4,99';
+    if(skin.unlockType === 'missions') return skin.unlock + ' missões';
     return '???';
   }
 
@@ -1989,6 +2113,7 @@
         explode(a.x, a.y);
         score += Math.floor(a.r); // pequeno bônus por asteroide destruído
         gameStats.laserKills++;
+        missionProgress('laser', 1);
       } else {
         survivors.push(a);
       }
@@ -2142,7 +2267,10 @@
     saveAchievementState();
     unlockAchievement('primeiro-voo');
     if(gameStats.gamesPlayed >= 20) unlockAchievement('veterano');
-    if(laserCharges === 3) unlockAchievement('sem-perder-laser');
+    if(laserCharges === 3){ unlockAchievement('sem-perder-laser'); missionProgress('nolaser', 1); }
+    missionProgress('games', 1);
+    missionProgress('score', finalScore);
+    missionProgress('time', Math.floor(elapsed));
 
     let newlyUnlocked = [];
     if(finalScore > best){
