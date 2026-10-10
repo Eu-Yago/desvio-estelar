@@ -1,12 +1,18 @@
 {
+  "id": "./desvio-estelar.html",
   "name": "Desvio Estelar",
   "short_name": "Desvio Estelar",
+  "description": "Desvie de asteroides no espaço, suba de patente no ranking e desbloqueie naves, conquistas e missões diárias.",
+  "lang": "pt-BR",
   "start_url": "./desvio-estelar.html",
+  "scope": "./",
   "display": "standalone",
+  "orientation": "portrait",
+  "categories": ["games", "entertainment"],
   "background_color": "#050510",
   "theme_color": "#050510",
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
   ]
 }
