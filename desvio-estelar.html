@@ -270,7 +270,7 @@
   }
   #redeemCornerBtn:active{ background: rgba(244,240,255,0.15); }
   #soundToggleBtn{
-    position:absolute; top: 64px; left: 16px;
+    position:absolute; top: 16px; left: 16px;
     width: 40px; height: 40px; border-radius: 50%;
     border: 1px solid rgba(244,240,255,0.35);
     background: rgba(10,10,22,0.4);
@@ -657,7 +657,7 @@
   </div>
 
   <div id="overlay">
-    <button id="redeemCornerBtn" aria-label="Resgatar código">🎫</button>
+    <button id="redeemCornerBtn" aria-label="Resgatar código" style="display:none">🎫</button>
     <button id="soundToggleBtn" aria-label="Som">🔊</button>
     <div class="title">DESVIO ESTELAR</div>
     <div class="subtitle" id="welcomeSubtitle">um jogo pra passar o tempo</div>
@@ -1754,7 +1754,7 @@
     { id:'esmeralda', name:'Esmeralda', hull:'#c2ffd9', inner:'#3dffa0', glow:'rgba(61,255,160,0.7)',  thrust:'#3dffa0', laser:'#ff5d73', unlockType:'score', unlock:20000 },
     { id:'fundador',  name:'Fundador',  hull:'#1c1c26', inner:'#ffd54a', glow:'rgba(255,213,74,0.9)',  thrust:'#ffd54a', laser:'#ffd54a', unlockType:'name' },
     { id:'lendaria',  name:'Lendária',  hull:'#ffffff', inner:'#ff2fe0', glow:'rgba(255,255,255,0.85)', thrust:'#ff2fe0', laser:'#ff2fe0', unlockType:'achievements', dynamic:true },
-    { id:'personalizada', name:'Crie sua Nave', hull:'#ffffff', inner:'#7ce8d8', glow:'rgba(255,255,255,0.7)', thrust:'#7ce8d8', laser:'#7ce8d8', unlockType:'code', custom:true },
+    { id:'personalizada', name:'Crie sua Nave', hull:'#ffffff', inner:'#7ce8d8', glow:'rgba(255,255,255,0.7)', thrust:'#7ce8d8', laser:'#7ce8d8', unlockType:'free', custom:true },
     { id:'cometa',    name:'Cometa',    hull:'#d6f1ff', inner:'#4db8ff', glow:'rgba(77,184,255,0.8)',  thrust:'#4db8ff', laser:'#4db8ff', unlockType:'missions', unlock:7 },
     { id:'aurora',    name:'Aurora',    hull:'#e6ffe9', inner:'#b36bff', glow:'rgba(179,107,255,0.8)', thrust:'#b36bff', laser:'#3dffa0', unlockType:'missions', unlock:20 },
   ];
@@ -1770,6 +1770,8 @@
     const storedCustom = JSON.parse(window.localStorage.getItem('desvioEstelar_customColors') || 'null');
     if(storedCustom && storedCustom.hull && storedCustom.inner) customColors = storedCustom;
   }catch(e){}
+
+  if(!unlockedSkins.includes('personalizada')) unlockedSkins.push('personalizada');
 
   function saveCustomColors(){
     try{ window.localStorage.setItem('desvioEstelar_customColors', JSON.stringify(customColors)); }catch(e){}
